@@ -2439,6 +2439,24 @@
                         target.fontSize = AppState.textDraftSize;
                         target.bold = AppState.textDraftBold;
                     }
+                } else {
+                    AppState.texts.push({
+                        id: uid(),
+                        x: AppState.pendingTextPos.x,
+                        y: AppState.pendingTextPos.y,
+                        text: val,
+                        fontSize: AppState.textDraftSize,
+                        color: AppState.activeColor,
+                        bold: AppState.textDraftBold,
+                        rotation: 0
+                    });
+                }
+                renderAllLayers();
+                scheduleSavePage();
+            }
+            textPopover.classList.add('hidden');
+        });
+
         // Recolor Selected Objects (Stroke Color)
         document.querySelectorAll('#lasso-recolor-swatches button').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2636,6 +2654,26 @@
                     document.getElementById('popover-shapes').classList.toggle('hidden');
                     document.getElementById('popover-symbols').classList.add('hidden');
                     document.getElementById('popover-stroke').classList.add('hidden');
+                } else {
+                    document.getElementById('popover-symbols').classList.add('hidden');
+                    document.getElementById('popover-shapes').classList.add('hidden');
+                }
+
+                // Sync stroke slider with current tool size
+                const currentSize = tool === 'highlighter' ? AppState.highlighterSize : AppState.penSize;
+                document.getElementById('slider-stroke-size').value = currentSize;
+                document.getElementById('slider-size-val').textContent = `${toPersianDigits(currentSize)} پیکسل`;
+                document.getElementById('label-stroke-size').textContent = toPersianDigits(currentSize);
+            });
+        });
+
+        // Straight Line (Ruler) Mode Toggle for Pen & Highlighter
+        const btnStraightLine = document.getElementById('btn-straight-line');
+        btnStraightLine.addEventListener('click', () => {
+            AppState.straightLineMode = !AppState.straightLineMode;
+            btnStraightLine.classList.toggle('active', AppState.straightLineMode);
+        });
+
         // Geometric Shape Picker & Shape Stroke/Fill Color Pickers
         document.querySelectorAll('#shapes-grid .shape-item').forEach(btn => {
             btn.addEventListener('click', () => {
