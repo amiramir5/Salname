@@ -6,6 +6,8 @@
     <title>سالنامه هوشمند و نوت‌برداری دیجیتال (۱۴۰۵ - ۱۴۰۶)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <!-- PDF.js via Cloudflare CDN (Unblocked & Fast in Iran) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root {
             --bg-app: #F8FAFC;
@@ -101,6 +103,12 @@
             overflow: hidden;
         }
 
+        @media (max-width: 768px) {
+            #canvas-viewport {
+                height: calc(100vh - 128px);
+            }
+        }
+
         canvas {
             position: absolute;
             top: 0;
@@ -108,6 +116,46 @@
             width: 100%;
             height: 100%;
             touch-action: none;
+        }
+
+        /* Left Floating Vertical Dock for Tablet & Desktop */
+        #left-tool-dock {
+            position: fixed;
+            left: 12px;
+            top: 96px;
+            bottom: 16px;
+            width: 52px;
+            z-index: 40;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 4px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(8px);
+            border: 1px solid #E2E8F0;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+            overflow-y: auto;
+        }
+
+        /* Responsive Mobile Bottom Dock */
+        @media (max-width: 768px) {
+            #left-tool-dock {
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                height: 52px;
+                flex-direction: row;
+                border-radius: 16px 16px 0 0;
+                padding: 4px 10px;
+                overflow-x: auto;
+                overflow-y: hidden;
+                justify-content: flex-start;
+                gap: 6px;
+            }
         }
 
         /* Priority input styling */
@@ -128,23 +176,23 @@
 </head>
 <body class="flex flex-col h-screen w-screen overflow-hidden select-none">
 
-    <!-- ROW 1: Ultra-Compact Planner Header & Floating Tool Dock (46px height) -->
-    <header class="h-[46px] w-full bg-white border-b border-slate-200 px-3 flex items-center justify-between z-30 shrink-0">
+    <!-- ROW 1: Ultra-Compact Planner Header (46px height) -->
+    <header class="h-[46px] w-full bg-white border-b border-slate-200 px-2 sm:px-3 flex items-center justify-between z-30 shrink-0 overflow-x-auto">
         
         <!-- Right Section: Calendar Navigation & Today -->
-        <div class="flex items-center gap-1.5">
-            <button id="btn-calendar-drawer" class="tool-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 border border-slate-200 hover:bg-slate-50" title="تقویم جامع سالنامه">
-                <svg class="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button id="btn-calendar-drawer" class="tool-btn flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 border border-slate-200 hover:bg-slate-50" title="تقویم جامع سالنامه">
+                <svg class="w-4 h-4 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                     <line x1="16" y1="2" x2="16" y2="6"></line>
                     <line x1="8" y1="2" x2="8" y2="6"></line>
                     <line x1="3" y1="10" x2="21" y2="10"></line>
                 </svg>
-                <span id="header-date-title" class="font-semibold text-slate-800">چهارشنبه ۲۲ مهر ۱۴۰۵</span>
+                <span id="header-date-title" class="font-semibold text-slate-800 whitespace-nowrap">چهارشنبه ۲۲ مهر ۱۴۰۵</span>
                 <span id="header-holiday-badge" class="hidden px-1.5 py-0.5 text-[10px] bg-red-50 text-red-600 rounded font-medium">تعطیل</span>
             </button>
 
-            <div class="flex items-center border border-slate-200 rounded-md overflow-hidden">
+            <div class="flex items-center border border-slate-200 rounded-md overflow-hidden shrink-0">
                 <button id="btn-prev-day" class="p-1.5 hover:bg-slate-100 text-slate-600 transition" title="روز قبل">
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </button>
@@ -153,90 +201,33 @@
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </button>
             </div>
-            <span id="header-page-num" class="text-[11px] text-slate-400 mr-1 hidden sm:inline">صفحه ۲۲ از ۳۰۵</span>
+            <span id="header-page-num" class="text-[11px] text-slate-400 mr-1 hidden lg:inline">صفحه ۲۲ از ۳۰۵</span>
         </div>
 
-        <!-- Center Section: Precision Studio Tool Dock -->
-        <div class="flex items-center gap-1 bg-slate-50 px-1.5 py-1 rounded-lg border border-slate-200">
-            <!-- Pen Tool -->
-            <button data-tool="pen" class="tool-btn active p-1.5 rounded-md text-slate-700" title="خودکار و روان‌نویس وکتوری">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
-                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
-                    <path d="M2 2l7.586 7.586"></path>
-                    <circle cx="11" cy="11" r="2"></circle>
+        <!-- Center Section: PDF Annotator Controls (Appears when PDF is loaded or ready to import) -->
+        <div class="flex items-center gap-1.5 shrink-0 mx-1">
+            <input type="file" id="input-pdf-upload" accept="application/pdf" class="hidden">
+            <button id="btn-pdf-open" class="tool-btn px-2 py-1 rounded-md text-[11px] font-medium text-slate-700 border border-slate-200 flex items-center gap-1 hover:bg-slate-50" title="باز کردن فایل PDF روی این برگه جهت حاشیه‌نویسی">
+                <svg class="w-3.5 h-3.5 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
                 </svg>
+                <span class="hidden sm:inline">باز کردن PDF</span>
             </button>
 
-            <!-- True Layered Highlighter -->
-            <button data-tool="highlighter" class="tool-btn p-1.5 rounded-md text-slate-700" title="هایلایتر لایه‌ای شفاف">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m9 11-6 6v3h9l3-3"></path>
-                    <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path>
-                </svg>
-            </button>
-
-            <!-- Vector Eraser (Stroke & Partial) -->
-            <button data-tool="eraser" class="tool-btn p-1.5 rounded-md text-slate-700" title="پاک‌کن وکتوری (حذف خط یا موضعی)">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path>
-                    <path d="M22 21H7"></path>
-                    <path d="m5 11 9 9"></path>
-                </svg>
-            </button>
-
-            <!-- Lasso / Selection & Transform Tool -->
-            <button data-tool="lasso" class="tool-btn p-1.5 rounded-md text-slate-700" title="ابزار کمند و انتخاب همه‌کاره (Lasso & Transform)">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M7 22a5 5 0 0 1-2-4"></path>
-                    <path d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-3-.4"></path>
-                    <path d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
-                </svg>
-            </button>
-
-            <!-- Floating Text Box Tool -->
-            <button data-tool="text" class="tool-btn p-1.5 rounded-md text-slate-700" title="ایجاد جعبه متن شناور">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="4 7 4 4 20 4 20 7"></polyline>
-                    <line x1="9" y1="20" x2="15" y2="20"></line>
-                    <line x1="12" y1="4" x2="12" y2="20"></line>
-                </svg>
-            </button>
-
-            <!-- Vector Productivity Symbols Menu Trigger -->
-            <div class="relative">
-                <button id="btn-symbols-menu" data-tool="stamp" class="tool-btn p-1.5 rounded-md text-slate-700 flex items-center gap-0.5" title="سمبل‌های وکتوری برنامه‌ریزی">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                    </svg>
-                </button>
+            <!-- PDF Page Navigation (Visible when PDF is active on page) -->
+            <div id="pdf-controls-bar" class="hidden items-center gap-1 bg-rose-50 border border-rose-200 rounded-md px-1.5 py-0.5 text-[11px] text-rose-800">
+                <button id="btn-pdf-prev" class="px-1 hover:bg-rose-100 rounded" title="صفحه قبل PDF">‹</button>
+                <span id="label-pdf-page" class="font-semibold px-1">۱ / ۱</span>
+                <button id="btn-pdf-next" class="px-1 hover:bg-rose-100 rounded" title="صفحه بعد PDF">›</button>
+                <button id="btn-pdf-remove" class="text-rose-600 hover:text-rose-900 pr-1 border-r border-rose-200" title="حذف پس‌زمینه PDF">✕</button>
             </div>
-
-            <div class="h-4 w-[1px] bg-slate-200 mx-1"></div>
-
-            <!-- Color Swatches -->
-            <div id="color-palette" class="flex items-center gap-1.5 px-1">
-                <button data-color="#0F172A" class="color-swatch active w-4 h-4 rounded-full bg-[#0F172A]" title="مشکی جوهری"></button>
-                <button data-color="#1D4ED8" class="color-swatch w-4 h-4 rounded-full bg-[#1D4ED8]" title="آبی خودکاری"></button>
-                <button data-color="#DC2626" class="color-swatch w-4 h-4 rounded-full bg-[#DC2626]" title="قرمز تصحیح"></button>
-                <button data-color="#047857" class="color-swatch w-4 h-4 rounded-full bg-[#047857]" title="سبز زمردی"></button>
-                <button data-color="#7C3AED" class="color-swatch w-4 h-4 rounded-full bg-[#7C3AED]" title="بنفش"></button>
-                <button data-color="#FACC15" class="color-swatch w-4 h-4 rounded-full bg-[#FACC15] border border-slate-300" title="زرد هایلایت"></button>
-            </div>
-
-            <div class="h-4 w-[1px] bg-slate-200 mx-1"></div>
-
-            <!-- Stroke Width & Streamline Popover Button -->
-            <button id="btn-stroke-settings" class="tool-btn px-2 py-1 rounded-md text-[11px] font-medium text-slate-700 flex items-center gap-1 border border-slate-200 bg-white" title="ضخامت قلم و شدت زیبانویسی">
-                <span class="w-2 h-2 rounded-full bg-slate-800 inline-block"></span>
-                <span id="label-stroke-size">۳</span>
-                <span class="text-slate-400">|</span>
-                <span class="text-blue-600" id="label-streamline">صاف‌ساز: ۸۵٪</span>
-            </button>
         </div>
 
-        <!-- Left Section: Stylus Only, Undo/Redo, Paper & Export -->
-        <div class="flex items-center gap-1">
+        <!-- Left Section: Stylus Only, Sync/Backup, Undo/Redo, Paper & Export -->
+        <div class="flex items-center gap-1 shrink-0">
             <!-- Stylus Only (Palm Rejection) Toggle -->
             <button id="btn-stylus-only" class="tool-btn px-2 py-1 rounded-md text-[11px] font-medium text-slate-600 border border-slate-200 flex items-center gap-1" title="فقط قلم هوشمند (جلوگیری از لمس دست / Palm Rejection)">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -270,6 +261,17 @@
                 </button>
             </div>
 
+            <!-- Cross-Device Backup / Restore (Mobile <-> Tablet Sync) -->
+            <button id="btn-sync-modal" class="tool-btn px-2 py-1 rounded-md text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-200 flex items-center gap-1" title="انتقال و همگام‌سازی بین تبلت و موبایل">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
+                    <path d="M16 16h5v5"></path>
+                </svg>
+                <span class="hidden xl:inline">انتقال/بکاپ</span>
+            </button>
+
             <!-- Export PNG -->
             <button id="btn-export" class="tool-btn px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-900 text-white hover:bg-slate-800 flex items-center gap-1" title="دانلود تصویر باکیفیت صفحه">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -282,63 +284,116 @@
         </div>
     </header>
 
-<!-- STREAMING_CHUNK:Building slim 36px daily priority bar and time ruler to preserve >88% vertical writing real estate... -->
-    <!-- ROW 2: Ultra-Slim Daily Priorities & Compact Timeline Bar (36px height -> Total Top = 82px, >88% Free Canvas) -->
-    <div class="h-[36px] w-full bg-[#F8FAFC] border-b border-slate-200 px-3 flex items-center justify-between text-xs z-20 shrink-0">
-        <!-- 3 Slim Priority Inputs -->
-        <div class="flex items-center gap-3 flex-1 max-w-2xl">
-            <span class="text-[11px] font-semibold text-slate-500 shrink-0 flex items-center gap-1">
-                <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-                اولویت‌های روز:
-            </span>
-            <div class="flex items-center gap-2 flex-1">
-                <div class="flex items-center gap-1 bg-white border border-slate-200 rounded px-2 py-0.5 flex-1">
-                    <span class="text-[10px] font-bold text-blue-600">۱.</span>
-                    <input id="prio-1" type="text" class="priority-input" placeholder="اولویت اول...">
-                </div>
-                <div class="flex items-center gap-1 bg-white border border-slate-200 rounded px-2 py-0.5 flex-1">
-                    <span class="text-[10px] font-bold text-blue-600">۲.</span>
-                    <input id="prio-2" type="text" class="priority-input" placeholder="اولویت دوم...">
-                </div>
-                <div class="flex items-center gap-1 bg-white border border-slate-200 rounded px-2 py-0.5 flex-1 hidden sm:flex">
-                    <span class="text-[10px] font-bold text-blue-600">۳.</span>
-                    <input id="prio-3" type="text" class="priority-input" placeholder="اولویت سوم...">
-                </div>
-            </div>
+    <!-- LEFT VERTICAL DOCK (Tablet/Desktop) & BOTTOM DOCK (Mobile) -->
+    <aside id="left-tool-dock">
+        <div class="flex md:flex-col items-center gap-1.5">
+            <!-- Pen Tool -->
+            <button data-tool="pen" class="tool-btn active p-2 rounded-xl text-slate-700" title="خودکار و روان‌نویس وکتوری">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                    <path d="M2 2l7.586 7.586"></path>
+                    <circle cx="11" cy="11" r="2"></circle>
+                </svg>
+            </button>
+
+            <!-- True Layered Highlighter -->
+            <button data-tool="highlighter" class="tool-btn p-2 rounded-xl text-slate-700" title="هایلایتر لایه‌ای شفاف">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 11-6 6v3h9l3-3"></path>
+                    <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path>
+                </svg>
+            </button>
+
+            <!-- Straight Line Mode Toggle (For Pen & Highlighter) -->
+            <button id="btn-straight-line" class="tool-btn p-2 rounded-xl text-slate-700" title="حالت خط‌کش (کشیدن خط کاملاً صاف با خودکار یا هایلایتر)">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="20" x2="20" y2="4"></line>
+                    <circle cx="4" cy="20" r="2"></circle>
+                    <circle cx="20" cy="4" r="2"></circle>
+                </svg>
+            </button>
+
+            <!-- Geometric Shapes Tool (Rectangle, Circle, Line, Arrow, Triangle) -->
+            <button id="btn-shapes-menu" data-tool="shape" class="tool-btn p-2 rounded-xl text-slate-700" title="رسم اشکال هندسی وکتوری (مربع، مستطیل، دایره، فلش)">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="10" height="10" rx="1"></rect>
+                    <circle cx="16" cy="16" r="5"></circle>
+                </svg>
+            </button>
+
+            <!-- Vector Eraser (Stroke & Partial) -->
+            <button data-tool="eraser" class="tool-btn p-2 rounded-xl text-slate-700" title="پاک‌کن وکتوری (حذف خط یا موضعی)">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path>
+                    <path d="M22 21H7"></path>
+                    <path d="m5 11 9 9"></path>
+                </svg>
+            </button>
+
+            <!-- Lasso / Selection & Transform Tool -->
+            <button data-tool="lasso" class="tool-btn p-2 rounded-xl text-slate-700" title="ابزار کمند و انتخاب همه‌کاره (تغییر سایز، رنگ و چرخش)">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M7 22a5 5 0 0 1-2-4"></path>
+                    <path d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-3-.4"></path>
+                    <path d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+                </svg>
+            </button>
+
+            <!-- Floating Text Box Tool -->
+            <button data-tool="text" class="tool-btn p-2 rounded-xl text-slate-700" title="ایجاد جعبه متن شناور">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                    <line x1="9" y1="20" x2="15" y2="20"></line>
+                    <line x1="12" y1="4" x2="12" y2="20"></line>
+                </svg>
+            </button>
+
+            <!-- Vector Productivity Symbols Menu Trigger -->
+            <button id="btn-symbols-menu" data-tool="stamp" class="tool-btn p-2 rounded-xl text-slate-700" title="سمبل‌های وکتوری برنامه‌ریزی">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+            </button>
         </div>
 
-        <!-- Slim Horizontal Time Bar & Save Status -->
-        <div class="flex items-center gap-2 shrink-0 mr-2">
-            <div class="hidden xl:flex items-center gap-1 text-[10px] text-slate-400 border-r border-slate-200 pr-2">
-                <span>ساعت کاری:</span>
-                <span class="px-1 py-0.5 bg-white border border-slate-200 rounded text-slate-600">۰۸</span>
-                <span class="px-1 py-0.5 bg-white border border-slate-200 rounded text-slate-600">۱۰</span>
-                <span class="px-1 py-0.5 bg-white border border-slate-200 rounded text-slate-600">۱۲</span>
-                <span class="px-1 py-0.5 bg-white border border-slate-200 rounded text-slate-600">۱۴</span>
-                <span class="px-1 py-0.5 bg-white border border-slate-200 rounded text-slate-600">۱۶</span>
-                <span class="px-1 py-0.5 bg-white border border-slate-200 rounded text-slate-600">۱۸</span>
-                <span class="px-1 py-0.5 bg-white border border-slate-200 rounded text-slate-600">۲۰</span>
-            </div>
-            <span id="save-indicator" class="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                ذخیره در IndexedDB
-            </span>
-        </div>
-    </div>
+        <div class="w-6 h-[1px] bg-slate-200 my-1 hidden md:block"></div>
 
+        <!-- Color Swatches -->
+        <div id="color-palette" class="flex md:flex-col items-center gap-2 py-1">
+            <button data-color="#0F172A" class="color-swatch active w-4 h-4 rounded-full bg-[#0F172A]" title="مشکی جوهری"></button>
+            <button data-color="#1D4ED8" class="color-swatch w-4 h-4 rounded-full bg-[#1D4ED8]" title="آبی خودکاری"></button>
+            <button data-color="#DC2626" class="color-swatch w-4 h-4 rounded-full bg-[#DC2626]" title="قرمز تصحیح"></button>
+            <button data-color="#047857" class="color-swatch w-4 h-4 rounded-full bg-[#047857]" title="سبز زمردی"></button>
+            <button data-color="#7C3AED" class="color-swatch w-4 h-4 rounded-full bg-[#7C3AED]" title="بنفش"></button>
+            <button data-color="#FACC15" class="color-swatch w-4 h-4 rounded-full bg-[#FACC15] border border-slate-300" title="زرد هایلایت"></button>
+        </div>
+
+        <div class="w-6 h-[1px] bg-slate-200 my-1 hidden md:block"></div>
+
+        <!-- Stroke Width & Streamline Popover Button -->
+        <button id="btn-stroke-settings" class="tool-btn p-1.5 rounded-xl text-[10px] font-bold text-slate-700 flex flex-col items-center gap-0.5 border border-slate-200 bg-slate-50 w-9" title="ضخامت قلم و شدت زیبانویسی">
+            <span class="w-2 h-2 rounded-full bg-slate-800 inline-block"></span>
+            <span id="label-stroke-size">۳</span>
+            <span class="hidden" id="label-streamline">۸۵٪</span>
+        </button>
+    </aside>
+
+    <!-- ROW 2: Ultra-Slim Daily Priorities & Compact Timeline Bar (36px height) -->
     <!-- MAIN WRITING CANVAS AREA (>88% Vertical Real Estate) -->
     <main id="canvas-viewport" class="paper-lined">
-        <!-- Subtle Right-Side Vertical Time Margin Guide rendered directly on background/canvas -->
+        <!-- Layer 0: PDF Document Background Canvas (When PDF Annotator is active) -->
+        <canvas id="canvas-pdf" class="pointer-events-none"></canvas>
         <!-- Layer 1: True Layered Highlighter Canvas (Multiply blend mode / 0.38 opacity) -->
         <canvas id="canvas-highlighter" style="opacity: 0.38; mix-blend-mode: multiply;"></canvas>
-        <!-- Layer 2: Crisp Ink, Vector Symbols, and Text Elements Canvas -->
+        <!-- Layer 2: Crisp Ink, Vector Shapes, Symbols, and Text Elements Canvas -->
         <canvas id="canvas-ink"></canvas>
         <!-- Layer 3: Active Stroke Preview, Lasso Path, and Transform Bounding Box Handles -->
         <canvas id="canvas-interaction"></canvas>
 
         <!-- Floating Selection Context Toolbar (Appears automatically when objects are selected via Lasso) -->
-        <div id="lasso-context-bar" class="hidden absolute z-30 bg-white border border-slate-200 shadow-lg rounded-lg px-2.5 py-1.5 flex items-center gap-2" style="top: 20px; left: 50%; transform: translateX(-50%);">
-            <span class="text-[11px] font-medium text-slate-500 pl-1 border-l border-slate-200">تغییر رنگ انتخاب:</span>
+        <div id="lasso-context-bar" class="hidden absolute z-30 bg-white border border-slate-200 shadow-lg rounded-xl px-2.5 py-1.5 flex flex-wrap items-center gap-2 max-w-[95vw]" style="top: 20px; left: 50%; transform: translateX(-50%);">
+            <span class="text-[11px] font-medium text-slate-500 pl-1 border-l border-slate-200 hidden sm:inline">رنگ:</span>
             <div class="flex items-center gap-1.5" id="lasso-recolor-swatches">
                 <button data-recolor="#0F172A" class="w-4 h-4 rounded-full bg-[#0F172A] hover:scale-110 transition"></button>
                 <button data-recolor="#1D4ED8" class="w-4 h-4 rounded-full bg-[#1D4ED8] hover:scale-110 transition"></button>
@@ -346,6 +401,13 @@
                 <button data-recolor="#047857" class="w-4 h-4 rounded-full bg-[#047857] hover:scale-110 transition"></button>
                 <button data-recolor="#7C3AED" class="w-4 h-4 rounded-full bg-[#7C3AED] hover:scale-110 transition"></button>
                 <button data-recolor="#FACC15" class="w-4 h-4 rounded-full bg-[#FACC15] border border-slate-300 hover:scale-110 transition"></button>
+            </div>
+            <div class="h-4 w-[1px] bg-slate-200"></div>
+            <!-- Direct Scale & Stroke Size Controls inside Selection Bar -->
+            <div class="flex items-center gap-1">
+                <span class="text-[10px] text-slate-500">سایز:</span>
+                <button id="btn-selection-scale-down" class="px-1.5 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 rounded font-bold text-slate-700" title="کوچک کردن شیء انتخابی">−</button>
+                <button id="btn-selection-scale-up" class="px-1.5 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 rounded font-bold text-slate-700" title="بزرگ کردن شیء انتخابی">+</button>
             </div>
             <div class="h-4 w-[1px] bg-slate-200"></div>
             <button id="btn-selection-edit-text" class="hidden px-2 py-0.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50 rounded transition">ویرایش متن</button>
@@ -375,7 +437,7 @@
     </main>
 
     <!-- Popover: Stroke Width, Eraser Mode & Ink Beautifier Settings -->
-    <div id="popover-stroke" class="hidden fixed top-[50px] left-1/2 -translate-x-1/2 z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-3.5 w-72">
+    <div id="popover-stroke" class="hidden fixed top-[100px] left-[72px] z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-3.5 w-72">
         <div class="space-y-3">
             <div>
                 <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
@@ -404,8 +466,39 @@
         </div>
     </div>
 
+    <!-- Popover: Geometric Shapes Selector -->
+    <div id="popover-shapes" class="hidden fixed top-[140px] left-[72px] z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-3 w-64">
+        <div class="text-xs font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">رسم اشکال هندسی وکتوری (بکشید و رها کنید)</div>
+        <div class="grid grid-cols-3 gap-2" id="shapes-grid">
+            <button data-shape="rect" class="shape-item p-2 border border-blue-200 bg-blue-50 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50">
+                <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"></rect></svg>
+                <span class="text-[10px] text-slate-600">مستطیل</span>
+            </button>
+            <button data-shape="square" class="shape-item p-2 border border-slate-200 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50">
+                <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                <span class="text-[10px] text-slate-600">مربع</span>
+            </button>
+            <button data-shape="circle" class="shape-item p-2 border border-slate-200 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50">
+                <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"></circle></svg>
+                <span class="text-[10px] text-slate-600">دایره/بیضی</span>
+            </button>
+            <button data-shape="triangle" class="shape-item p-2 border border-slate-200 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50">
+                <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 4 20 19 4 19"></polygon></svg>
+                <span class="text-[10px] text-slate-600">مثلث</span>
+            </button>
+            <button data-shape="line" class="shape-item p-2 border border-slate-200 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50">
+                <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="20" x2="20" y2="4"></line></svg>
+                <span class="text-[10px] text-slate-600">خط صاف</span>
+            </button>
+            <button data-shape="arrow" class="shape-item p-2 border border-slate-200 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50">
+                <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="12" x2="20" y2="12"></line><polyline points="14 6 20 12 14 18"></polyline></svg>
+                <span class="text-[10px] text-slate-600">فلش</span>
+            </button>
+        </div>
+    </div>
+
     <!-- Popover: Vector Productivity Symbols -->
-    <div id="popover-symbols" class="hidden fixed top-[50px] left-1/2 -translate-x-1/2 z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-3 w-64">
+    <div id="popover-symbols" class="hidden fixed top-[160px] left-[72px] z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-3 w-64">
         <div class="text-xs font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">سمبل‌های وکتوری برنامه‌ریزی (کلیک روی بوم)</div>
         <div class="grid grid-cols-4 gap-2" id="symbols-grid">
             <button data-symbol="check" class="symbol-item p-2 border border-blue-200 bg-blue-50 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50" title="تیک انجام کار">
@@ -440,6 +533,31 @@
                 <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"></rect></svg>
                 <span class="text-[10px] text-slate-600">چک‌باکس</span>
             </button>
+        </div>
+    </div>
+
+    <!-- Modal: Cross-Device Sync / Backup & Restore (For Tablet <-> Mobile in Iran) -->
+    <div id="modal-sync" class="hidden fixed inset-0 z-50 bg-slate-900/30 backdrop-blur-[1px] flex items-center justify-center p-4">
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-5">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 class="text-sm font-bold text-slate-800">انتقال و همگام‌سازی بین تبلت و موبایل</h3>
+                <button id="btn-close-sync" class="p-1 text-slate-400 hover:text-slate-700">✕</button>
+            </div>
+            <p class="text-xs text-slate-600 mt-3 leading-relaxed">
+                تمام دست‌خط‌ها و یادداشت‌های شما بدون نیاز به اینترنت و بدون محدودیت حجم در حافظه امن مرورگر (<span class="font-semibold">IndexedDB</span>) ذخیره می‌شوند. برای دیدن یادداشت‌های تبلت روی گوشی (یا برعکس)، فایل پشتیبان کل سالنامه را دانلود کرده و در دستگاه دیگر وارد کنید:
+            </p>
+            <div class="mt-4 space-y-2.5">
+                <button id="btn-backup-export" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    دانلود فایل پشتیبان کل سالنامه (JSON)
+                </button>
+                <input type="file" id="input-backup-import" accept=".json" class="hidden">
+                <button id="btn-backup-import" class="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    بارگذاری فایل پشتیبان از دستگاه دیگر
+                </button>
+            </div>
+            <div id="sync-status-msg" class="mt-3 text-center text-xs font-medium text-emerald-600 hidden"></div>
         </div>
     </div>
 
@@ -670,9 +788,95 @@
                     req.onerror = () => resolve(new Set());
                 });
             }
+
+            async exportAllPages() {
+                if (!this.db) await this.init();
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction(this.storeName, 'readonly');
+                    const store = tx.objectStore(this.storeName);
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => resolve([]);
+                });
+            }
+
+            async importAllPages(pagesArray) {
+                if (!this.db) await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(this.storeName, 'readwrite');
+                    const store = tx.objectStore(this.storeName);
+                    pagesArray.forEach(p => {
+                        if (p && p.dateKey) store.put(p);
+                    });
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = (e) => reject(e);
+                });
+            }
         }
 
         const dbEngine = new PlannerDatabase();
+
+        /**
+         * Helper: Generate Vector Points for Geometric Shapes (Rect, Square, Circle, Triangle, Line, Arrow)
+         */
+        function buildShapeVectorPoints(shapeType, startPt, endPt) {
+            let x1 = startPt.x, y1 = startPt.y;
+            let x2 = endPt.x, y2 = endPt.y;
+
+            if (shapeType === 'square') {
+                const side = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+                x2 = x1 + (x2 >= x1 ? side : -side);
+                y2 = y1 + (y2 >= y1 ? side : -side);
+            }
+
+            const pts = [];
+            if (shapeType === 'line') {
+                pts.push({ x: x1, y: y1, p: 0.5 }, { x: x2, y: y2, p: 0.5 });
+            } else if (shapeType === 'arrow') {
+                const angle = Math.atan2(y2 - y1, x2 - x1);
+                const headLen = Math.min(24, Math.max(12, Math.hypot(x2 - x1, y2 - y1) * 0.25));
+                const a1 = angle - Math.PI * 0.82;
+                const a2 = angle + Math.PI * 0.82;
+                pts.push(
+                    { x: x1, y: y1, p: 0.5 },
+                    { x: x2, y: y2, p: 0.5 },
+                    { x: x2 + Math.cos(a1) * headLen, y: y2 + Math.sin(a1) * headLen, p: 0.5 },
+                    { x: x2, y: y2, p: 0.5 },
+                    { x: x2 + Math.cos(a2) * headLen, y: y2 + Math.sin(a2) * headLen, p: 0.5 }
+                );
+            } else if (shapeType === 'rect' || shapeType === 'square') {
+                pts.push(
+                    { x: x1, y: y1, p: 0.5 },
+                    { x: x2, y: y1, p: 0.5 },
+                    { x: x2, y: y2, p: 0.5 },
+                    { x: x1, y: y2, p: 0.5 },
+                    { x: x1, y: y1, p: 0.5 }
+                );
+            } else if (shapeType === 'triangle') {
+                const topX = (x1 + x2) / 2;
+                pts.push(
+                    { x: topX, y: y1, p: 0.5 },
+                    { x: x2, y: y2, p: 0.5 },
+                    { x: x1, y: y2, p: 0.5 },
+                    { x: topX, y: y1, p: 0.5 }
+                );
+            } else if (shapeType === 'circle') {
+                const cx = (x1 + x2) / 2;
+                const cy = (y1 + y2) / 2;
+                const rx = Math.abs(x2 - x1) / 2;
+                const ry = Math.abs(y2 - y1) / 2;
+                const steps = 48;
+                for (let i = 0; i <= steps; i++) {
+                    const theta = (i / steps) * Math.PI * 2;
+                    pts.push({
+                        x: cx + Math.cos(theta) * rx,
+                        y: cy + Math.sin(theta) * ry,
+                        p: 0.5
+                    });
+                }
+            }
+            return pts;
+        }
 
         /**
          * ============================================================================
@@ -770,6 +974,17 @@
                     ctx.arc(pts[0].x, pts[0].y, stroke.size / 2, 0, Math.PI * 2);
                     ctx.fillStyle = stroke.color;
                     ctx.fill();
+                    ctx.restore();
+                    return;
+                }
+
+                // If stroke is marked as sharp geometric / straight line, draw crisp linear segments
+                if (stroke.isSharpGeometry) {
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) {
+                        ctx.lineTo(pts[i].x, pts[i].y);
+                    }
+                    ctx.stroke();
                     ctx.restore();
                     return;
                 }
@@ -887,21 +1102,29 @@
         const AppState = {
             currentDateKey: detectTodayDateKey(),
             calendarModalMonthIdx: 0,
-            activeTool: 'pen',         // 'pen' | 'highlighter' | 'eraser' | 'lasso' | 'text' | 'stamp'
+            activeTool: 'pen',         // 'pen' | 'highlighter' | 'shape' | 'eraser' | 'lasso' | 'text' | 'stamp'
             activeColor: '#0F172A',
             penSize: 3,
             highlighterSize: 18,
             streamlineIntensity: 85,
+            straightLineMode: false,   // Ruler mode for Pen & Highlighter
+            activeShape: 'rect',       // 'rect' | 'square' | 'circle' | 'triangle' | 'line' | 'arrow'
             eraserMode: 'stroke',      // 'stroke' | 'partial'
             stylusOnly: false,
             activeSymbol: 'check',
             paperType: 'lined',        // 'lined' | 'grid' | 'dotted' | 'blank'
 
             // Current Page Vector Data
-            strokes: [],               // Array of { id, tool: 'pen'|'highlighter', color, size, points: [{x,y,p}] }
+            strokes: [],               // Array of { id, tool: 'pen'|'highlighter', color, size, points: [{x,y,p}], isSharpGeometry }
             texts: [],                 // Array of { id, x, y, text, fontSize, color, bold, rotation }
             symbols: [],               // Array of { id, x, y, symbolType, size, color, rotation }
             priorities: ['', '', ''],
+
+            // PDF Annotator State per Page
+            pdfDataBase64: null,
+            pdfPageNum: 1,
+            pdfTotalPages: 1,
+            pdfDocInstance: null,
 
             // Undo / Redo Stacks
             undoStack: [],
@@ -929,9 +1152,11 @@
 
         // DOM Elements
         const viewport = document.getElementById('canvas-viewport');
+        const canvasPdf = document.getElementById('canvas-pdf');
         const canvasHighlighter = document.getElementById('canvas-highlighter');
         const canvasInk = document.getElementById('canvas-ink');
         const canvasInteraction = document.getElementById('canvas-interaction');
+        const ctxPdf = canvasPdf.getContext('2d');
         const ctxHighlighter = canvasHighlighter.getContext('2d');
         const ctxInk = canvasInk.getContext('2d');
         const ctxInteraction = canvasInteraction.getContext('2d');
@@ -948,16 +1173,83 @@
         function resizeCanvases() {
             dpr = window.devicePixelRatio || 1;
             const rect = viewport.getBoundingClientRect();
-            [canvasHighlighter, canvasInk, canvasInteraction].forEach(c => {
+            [canvasPdf, canvasHighlighter, canvasInk, canvasInteraction].forEach(c => {
                 c.width = rect.width * dpr;
                 c.height = rect.height * dpr;
                 const ctx = c.getContext('2d');
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             });
+            renderPdfBackground();
             renderAllLayers();
         }
 
         window.addEventListener('resize', resizeCanvases);
+
+        /**
+         * PDF Annotator Engine (Render PDF Page onto Layer 0 Canvas)
+         */
+        if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        async function loadPdfFromBase64(base64Data, pageNum = 1) {
+            if (!base64Data || !window.pdfjsLib) {
+                AppState.pdfDocInstance = null;
+                ctxPdf.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
+                document.getElementById('pdf-controls-bar').classList.add('hidden');
+                document.getElementById('pdf-controls-bar').classList.remove('flex');
+                return;
+            }
+            try {
+                const raw = atob(base64Data.split(',')[1] || base64Data);
+                const uint8Array = new Uint8Array(raw.length);
+                for (let i = 0; i < raw.length; i++) uint8Array[i] = raw.charCodeAt(i);
+
+                const loadingTask = window.pdfjsLib.getDocument({ data: uint8Array });
+                AppState.pdfDocInstance = await loadingTask.promise;
+                AppState.pdfTotalPages = AppState.pdfDocInstance.numPages;
+                AppState.pdfPageNum = Math.min(Math.max(1, pageNum), AppState.pdfTotalPages);
+
+                document.getElementById('pdf-controls-bar').classList.remove('hidden');
+                document.getElementById('pdf-controls-bar').classList.add('flex');
+                updatePdfControlsUI();
+                await renderPdfBackground();
+            } catch (err) {
+                console.error('PDF Load Error:', err);
+            }
+        }
+
+        function updatePdfControlsUI() {
+            document.getElementById('label-pdf-page').textContent =
+                `${toPersianDigits(AppState.pdfPageNum)} / ${toPersianDigits(AppState.pdfTotalPages)}`;
+        }
+
+        async function renderPdfBackground() {
+            const w = viewport.clientWidth;
+            const h = viewport.clientHeight;
+            ctxPdf.clearRect(0, 0, w, h);
+            if (!AppState.pdfDocInstance) return;
+
+            try {
+                const page = await AppState.pdfDocInstance.getPage(AppState.pdfPageNum);
+                const unscaledViewport = page.getViewport({ scale: 1 });
+                const scale = Math.min((w - 80) / unscaledViewport.width, (h - 20) / unscaledViewport.height);
+                const scaledViewport = page.getViewport({ scale });
+
+                const offsetX = (w - scaledViewport.width) / 2;
+                const offsetY = (h - scaledViewport.height) / 2;
+
+                ctxPdf.save();
+                ctxPdf.translate(offsetX, offsetY);
+                await page.render({
+                    canvasContext: ctxPdf,
+                    viewport: scaledViewport
+                }).promise;
+                ctxPdf.restore();
+            } catch (e) {
+                console.error('PDF Render Error:', e);
+            }
+        }
 
         /**
          * Undo / Redo History & Auto-Save Management
@@ -1029,6 +1321,8 @@
                     symbols: AppState.symbols,
                     priorities: AppState.priorities,
                     paperType: AppState.paperType,
+                    pdfDataBase64: AppState.pdfDataBase64,
+                    pdfPageNum: AppState.pdfPageNum,
                     updatedAt: Date.now()
                 });
                 indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ذخیره در IndexedDB`;
@@ -1319,16 +1613,33 @@
             const h = viewport.clientHeight;
             ctxInteraction.clearRect(0, 0, w, h);
 
-            // 1. If currently drawing a pen/highlighter stroke, render live preview
-            if (AppState.isDrawing && (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter') && AppState.currentRawPoints.length > 0) {
+            // 1. If currently drawing a pen/highlighter stroke or geometric shape, render live preview
+            if (AppState.isDrawing && (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') && AppState.currentRawPoints.length > 0) {
                 ctxInteraction.save();
                 if (AppState.activeTool === 'highlighter') {
                     ctxInteraction.globalAlpha = 0.38;
                 }
+                let previewPts = AppState.currentRawPoints;
+                let sharp = false;
+                if (AppState.activeTool === 'shape' && AppState.currentRawPoints.length >= 2) {
+                    previewPts = buildShapeVectorPoints(
+                        AppState.activeShape,
+                        AppState.currentRawPoints[0],
+                        AppState.currentRawPoints[AppState.currentRawPoints.length - 1]
+                    );
+                    sharp = AppState.activeShape !== 'circle';
+                } else if (AppState.straightLineMode && AppState.currentRawPoints.length >= 2) {
+                    previewPts = [
+                        AppState.currentRawPoints[0],
+                        AppState.currentRawPoints[AppState.currentRawPoints.length - 1]
+                    ];
+                    sharp = true;
+                }
                 InkBeautifier.renderSmoothStroke(ctxInteraction, {
                     color: AppState.activeColor,
                     size: AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize,
-                    points: AppState.currentRawPoints
+                    points: previewPts,
+                    isSharpGeometry: sharp
                 });
                 ctxInteraction.restore();
             }
@@ -1421,6 +1732,7 @@
             // Close floating popovers on canvas touch
             document.getElementById('popover-stroke').classList.add('hidden');
             document.getElementById('popover-symbols').classList.add('hidden');
+            document.getElementById('popover-shapes').classList.add('hidden');
 
             e.preventDefault();
             canvasInteraction.setPointerCapture(e.pointerId);
@@ -1509,8 +1821,8 @@
                 return;
             }
 
-            // TOOL: PEN OR HIGHLIGHTER
-            if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter') {
+            // TOOL: PEN, HIGHLIGHTER, OR GEOMETRIC SHAPE
+            if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') {
                 clearSelection();
                 AppState.isDrawing = true;
                 AppState.currentRawPoints = [pt];
@@ -1526,7 +1838,7 @@
             // Capture all high-frequency coalesced stylus points to prevent any gaps or dashed lines
             const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : [e];
 
-            if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter') {
+            if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') {
                 for (const ev of events) {
                     AppState.currentRawPoints.push(getCanvasPoint(ev));
                 }
@@ -1558,20 +1870,40 @@
             AppState.isDrawing = false;
             AppState.activePointerId = null;
 
-            if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter') {
+            if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') {
                 if (AppState.currentRawPoints.length > 0) {
                     pushUndoState();
-                    // Apply Ink Beautifier & Streamline Engine
-                    const beautifiedPoints = InkBeautifier.beautify(
-                        AppState.currentRawPoints,
-                        AppState.streamlineIntensity
-                    );
+                    let finalPoints = [];
+                    let isSharpGeometry = false;
+
+                    if (AppState.activeTool === 'shape' && AppState.currentRawPoints.length >= 2) {
+                        finalPoints = buildShapeVectorPoints(
+                            AppState.activeShape,
+                            AppState.currentRawPoints[0],
+                            AppState.currentRawPoints[AppState.currentRawPoints.length - 1]
+                        );
+                        isSharpGeometry = AppState.activeShape !== 'circle';
+                    } else if (AppState.straightLineMode && AppState.currentRawPoints.length >= 2) {
+                        finalPoints = [
+                            AppState.currentRawPoints[0],
+                            AppState.currentRawPoints[AppState.currentRawPoints.length - 1]
+                        ];
+                        isSharpGeometry = true;
+                    } else {
+                        // Apply Ink Beautifier & Streamline Engine
+                        finalPoints = InkBeautifier.beautify(
+                            AppState.currentRawPoints,
+                            AppState.streamlineIntensity
+                        );
+                    }
+
                     AppState.strokes.push({
                         id: uid(),
-                        tool: AppState.activeTool,
+                        tool: AppState.activeTool === 'highlighter' ? 'highlighter' : 'pen',
                         color: AppState.activeColor,
                         size: AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize,
-                        points: beautifiedPoints
+                        points: finalPoints,
+                        isSharpGeometry
                     });
                     AppState.currentRawPoints = [];
                     renderAllLayers();
@@ -1871,6 +2203,45 @@
             });
         });
 
+        // Scale Selected Objects Up / Down via Context Bar Buttons
+        function scaleSelectedObjectsByFactor(scaleFactor) {
+            if (AppState.selectedIds.size === 0 || !AppState.selectionBounds) return;
+            pushUndoState();
+            const cx = AppState.selectionBounds.cx;
+            const cy = AppState.selectionBounds.cy;
+
+            AppState.strokes.forEach(s => {
+                if (AppState.selectedIds.has(s.id)) {
+                    s.size = Math.max(1, Math.min(45, s.size * scaleFactor));
+                    s.points.forEach(p => {
+                        p.x = cx + (p.x - cx) * scaleFactor;
+                        p.y = cy + (p.y - cy) * scaleFactor;
+                    });
+                }
+            });
+            AppState.symbols.forEach(sym => {
+                if (AppState.selectedIds.has(sym.id)) {
+                    sym.x = cx + (sym.x - cx) * scaleFactor;
+                    sym.y = cy + (sym.y - cy) * scaleFactor;
+                    sym.size = Math.max(12, Math.min(140, (sym.size || 28) * scaleFactor));
+                }
+            });
+            AppState.texts.forEach(t => {
+                if (AppState.selectedIds.has(t.id)) {
+                    t.x = cx + (t.x - cx) * scaleFactor;
+                    t.y = cy + (t.y - cy) * scaleFactor;
+                    t.fontSize = Math.round(Math.max(10, Math.min(72, (t.fontSize || 18) * scaleFactor)));
+                }
+            });
+
+            computeCombinedSelectionBounds();
+            renderAllLayers();
+            scheduleSavePage();
+        }
+
+        document.getElementById('btn-selection-scale-up').addEventListener('click', () => scaleSelectedObjectsByFactor(1.18));
+        document.getElementById('btn-selection-scale-down').addEventListener('click', () => scaleSelectedObjectsByFactor(0.84));
+
         // Edit Selected Text via Lasso Context Bar
         document.getElementById('btn-selection-edit-text').addEventListener('click', () => {
             const selectedText = AppState.texts.find(t => AppState.selectedIds.has(t.id));
@@ -1930,15 +2301,20 @@
                 AppState.symbols = saved.symbols || [];
                 AppState.priorities = saved.priorities || ['', '', ''];
                 AppState.paperType = saved.paperType || 'lined';
+                AppState.pdfDataBase64 = saved.pdfDataBase64 || null;
+                AppState.pdfPageNum = saved.pdfPageNum || 1;
             } else {
                 AppState.strokes = [];
                 AppState.texts = [];
                 AppState.symbols = [];
                 AppState.priorities = ['', '', ''];
+                AppState.pdfDataBase64 = null;
+                AppState.pdfPageNum = 1;
             }
 
             syncPriorityInputs();
             applyPaperClass();
+            await loadPdfFromBase64(AppState.pdfDataBase64, AppState.pdfPageNum);
             renderAllLayers();
         }
 
@@ -1986,12 +2362,124 @@
                 if (tool !== 'lasso') clearSelection();
                 if (tool === 'stamp') {
                     document.getElementById('popover-symbols').classList.toggle('hidden');
+                    document.getElementById('popover-shapes').classList.add('hidden');
+                    document.getElementById('popover-stroke').classList.add('hidden');
+                } else if (tool === 'shape') {
+                    document.getElementById('popover-shapes').classList.toggle('hidden');
+                    document.getElementById('popover-symbols').classList.add('hidden');
                     document.getElementById('popover-stroke').classList.add('hidden');
                 } else {
                     document.getElementById('popover-symbols').classList.add('hidden');
+                    document.getElementById('popover-shapes').classList.add('hidden');
                 }
                 renderAllLayers();
             });
+        });
+
+        // Straight Line Ruler Mode Toggle (Works with Pen & Highlighter)
+        const btnStraightLine = document.getElementById('btn-straight-line');
+        btnStraightLine.addEventListener('click', () => {
+            AppState.straightLineMode = !AppState.straightLineMode;
+            btnStraightLine.classList.toggle('active', AppState.straightLineMode);
+        });
+
+        // Geometric Shape Picker
+        document.querySelectorAll('#shapes-grid .shape-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                AppState.activeShape = btn.getAttribute('data-shape');
+                document.querySelectorAll('#shapes-grid .shape-item').forEach(b => {
+                    b.classList.remove('border-blue-200', 'bg-blue-50');
+                    b.classList.add('border-slate-200');
+                });
+                btn.classList.add('border-blue-200', 'bg-blue-50');
+                document.getElementById('popover-shapes').classList.add('hidden');
+            });
+        });
+
+        // PDF Annotator File Upload & Page Navigation
+        const inputPdfUpload = document.getElementById('input-pdf-upload');
+        document.getElementById('btn-pdf-open').addEventListener('click', () => inputPdfUpload.click());
+
+        inputPdfUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                AppState.pdfDataBase64 = ev.target.result;
+                AppState.pdfPageNum = 1;
+                await loadPdfFromBase64(AppState.pdfDataBase64, 1);
+                scheduleSavePage();
+            };
+            reader.readAsDataURL(file);
+            e.target.value = '';
+        });
+
+        document.getElementById('btn-pdf-prev').addEventListener('click', async () => {
+            if (!AppState.pdfDocInstance || AppState.pdfPageNum <= 1) return;
+            AppState.pdfPageNum--;
+            updatePdfControlsUI();
+            await renderPdfBackground();
+            scheduleSavePage();
+        });
+
+        document.getElementById('btn-pdf-next').addEventListener('click', async () => {
+            if (!AppState.pdfDocInstance || AppState.pdfPageNum >= AppState.pdfTotalPages) return;
+            AppState.pdfPageNum++;
+            updatePdfControlsUI();
+            await renderPdfBackground();
+            scheduleSavePage();
+        });
+
+        document.getElementById('btn-pdf-remove').addEventListener('click', async () => {
+            AppState.pdfDataBase64 = null;
+            AppState.pdfPageNum = 1;
+            await loadPdfFromBase64(null);
+            scheduleSavePage();
+        });
+
+        // Cross-Device Backup & Restore Modal Logic
+        const modalSync = document.getElementById('modal-sync');
+        const syncStatusMsg = document.getElementById('sync-status-msg');
+        document.getElementById('btn-sync-modal').addEventListener('click', () => {
+            syncStatusMsg.classList.add('hidden');
+            modalSync.classList.remove('hidden');
+        });
+        document.getElementById('btn-close-sync').addEventListener('click', () => modalSync.classList.add('hidden'));
+
+        document.getElementById('btn-backup-export').addEventListener('click', async () => {
+            const allData = await dbEngine.exportAllPages();
+            const blob = new Blob([JSON.stringify(allData)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Jalali_Planner_Backup_${AppState.currentDateKey}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            syncStatusMsg.textContent = 'فایل پشتیبان کل سالنامه با موفقیت دانلود شد.';
+            syncStatusMsg.classList.remove('hidden');
+        });
+
+        const inputBackupImport = document.getElementById('input-backup-import');
+        document.getElementById('btn-backup-import').addEventListener('click', () => inputBackupImport.click());
+        inputBackupImport.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                try {
+                    const parsed = JSON.parse(ev.target.result);
+                    if (Array.isArray(parsed)) {
+                        await dbEngine.importAllPages(parsed);
+                        await loadPlannerDay(AppState.currentDateKey);
+                        syncStatusMsg.textContent = 'تمامی صفحات و دست‌خط‌ها با موفقیت منتقل شدند!';
+                        syncStatusMsg.classList.remove('hidden');
+                    }
+                } catch (err) {
+                    console.error('Import error:', err);
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
         });
 
         // Color Palette Selection
@@ -2237,16 +2725,16 @@
             if (prioStr) {
                 eCtx.fillStyle = '#475569';
                 eCtx.font = '12px Vazirmatn';
-                eCtx.fillText(`اولویت‌ها: ${prioStr}`, w - 18, 46);
-            }
+            // 4. Composite PDF Layer if present
+            eCtx.drawImage(canvasPdf, 0, 56, w, h - 56);
 
-            // 4. Composite Highlighter Layer (with 0.38 alpha)
+            // 5. Composite Highlighter Layer (with 0.38 alpha)
             eCtx.save();
             eCtx.globalAlpha = 0.38;
             eCtx.drawImage(canvasHighlighter, 0, 56, w, h - 56);
             eCtx.restore();
 
-            // 5. Composite Crisp Ink, Symbols & Texts Layer
+            // 6. Composite Crisp Ink, Symbols & Texts Layer
             eCtx.drawImage(canvasInk, 0, 56, w, h - 56);
 
             // Trigger Download
@@ -2266,4 +2754,4 @@
         });
     </script>
 </body>
-</html>
+                            </html>
