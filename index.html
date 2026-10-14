@@ -96,11 +96,13 @@
 
         /* Touch action none on interactive canvas to prevent browser gestures */
         #canvas-viewport {
-            touch-action: none;
             position: relative;
             width: 100%;
             height: calc(100vh - 82px);
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
         }
 
         @media (max-width: 768px) {
@@ -109,12 +111,23 @@
             }
         }
 
+        /* 2x Tall Scrollable Paper Container */
+        #paper-stage {
+            position: relative;
+            width: 100%;
+            height: 1850px;
+            touch-action: pan-y;
+        }
+
         canvas {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
+        }
+
+        #canvas-interaction {
             touch-action: none;
         }
 
@@ -405,59 +418,82 @@
         </div>
     </section>
 
-    <!-- MAIN WRITING CANVAS AREA (>88% Vertical Real Estate) -->
-    <main id="canvas-viewport" class="paper-lined">
-        <!-- Layer 0: PDF Document Background Canvas (When PDF Annotator is active) -->
-        <canvas id="canvas-pdf" class="pointer-events-none"></canvas>
-        <!-- Layer 1: True Layered Highlighter Canvas (Hardware-accelerated opacity without heavy blend lag) -->
-        <canvas id="canvas-highlighter" class="pointer-events-none" style="opacity: 0.38;"></canvas>
-        <!-- Layer 2: Crisp Ink, Vector Shapes, Symbols, and Text Elements Canvas -->
-        <canvas id="canvas-ink" class="pointer-events-none"></canvas>
-        <!-- Layer 3: Active Stroke Preview, Lasso Path, and Transform Bounding Box Handles -->
-        <canvas id="canvas-interaction"></canvas>
+    <!-- MAIN WRITING CANVAS AREA (Scrollable 2x Paper Height) -->
+    <main id="canvas-viewport" class="bg-slate-200/60">
+        <div id="paper-stage" class="paper-lined shadow-sm">
+            <!-- Layer 0: PDF Document Background Canvas (When PDF Annotator is active) -->
+            <canvas id="canvas-pdf" class="pointer-events-none"></canvas>
+            <!-- Layer 1: True Layered Highlighter Canvas (Hardware-accelerated opacity without heavy blend lag) -->
+            <canvas id="canvas-highlighter" class="pointer-events-none" style="opacity: 0.38;"></canvas>
+            <!-- Layer 2: Crisp High-DPI Ink, Vector Shapes, Symbols, and Text Elements Canvas -->
+            <canvas id="canvas-ink" class="pointer-events-none"></canvas>
+            <!-- Layer 3: Ultra-Fast 1x Active Stroke Preview, Lasso Path, and Transform Bounding Box Handles -->
+            <canvas id="canvas-interaction"></canvas>
 
-        <!-- Floating Selection Context Toolbar (Appears automatically when objects are selected via Lasso) -->
-        <div id="lasso-context-bar" class="hidden absolute z-30 bg-white border border-slate-200 shadow-lg rounded-xl px-2.5 py-1.5 flex flex-wrap items-center gap-2 max-w-[95vw]" style="top: 20px; left: 50%; transform: translateX(-50%);">
-            <span class="text-[11px] font-medium text-slate-500 pl-1 border-l border-slate-200 hidden sm:inline">رنگ:</span>
-            <div class="flex items-center gap-1.5" id="lasso-recolor-swatches">
-                <button data-recolor="#0F172A" class="w-4 h-4 rounded-full bg-[#0F172A] hover:scale-110 transition"></button>
-                <button data-recolor="#1D4ED8" class="w-4 h-4 rounded-full bg-[#1D4ED8] hover:scale-110 transition"></button>
-                <button data-recolor="#DC2626" class="w-4 h-4 rounded-full bg-[#DC2626] hover:scale-110 transition"></button>
-                <button data-recolor="#047857" class="w-4 h-4 rounded-full bg-[#047857] hover:scale-110 transition"></button>
-                <button data-recolor="#7C3AED" class="w-4 h-4 rounded-full bg-[#7C3AED] hover:scale-110 transition"></button>
-                <button data-recolor="#FACC15" class="w-4 h-4 rounded-full bg-[#FACC15] border border-slate-300 hover:scale-110 transition"></button>
-            </div>
-            <div class="h-4 w-[1px] bg-slate-200"></div>
-            <!-- Direct Scale & Stroke Size Controls inside Selection Bar -->
-            <div class="flex items-center gap-1">
-                <span class="text-[10px] text-slate-500">سایز:</span>
-                <button id="btn-selection-scale-down" class="px-1.5 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 rounded font-bold text-slate-700" title="کوچک کردن شیء انتخابی">−</button>
-                <button id="btn-selection-scale-up" class="px-1.5 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 rounded font-bold text-slate-700" title="بزرگ کردن شیء انتخابی">+</button>
-            </div>
-            <div class="h-4 w-[1px] bg-slate-200"></div>
-            <button id="btn-selection-edit-text" class="hidden px-2 py-0.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50 rounded transition">ویرایش متن</button>
-            <button id="btn-selection-delete" class="px-2 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-50 rounded flex items-center gap-1 transition">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                حذف
-            </button>
-        </div>
-
-        <!-- Floating Text Editor Popover (For creating/editing vector text boxes on canvas) -->
-        <div id="text-editor-popover" class="hidden absolute z-40 bg-white border border-slate-300 shadow-xl rounded-lg p-2.5 w-72">
-            <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100">
-                <span class="text-xs font-semibold text-slate-700">جعبه متن شناور</span>
+            <!-- Floating Selection Context Toolbar (Appears automatically when objects are selected via Lasso) -->
+            <div id="lasso-context-bar" class="hidden absolute z-30 bg-white border border-slate-200 shadow-lg rounded-xl px-2.5 py-1.5 flex flex-wrap items-center gap-2 max-w-[95vw]" style="top: 20px; left: 50%; transform: translateX(-50%);">
+                <span class="text-[11px] font-medium text-slate-500 pl-1 border-l border-slate-200 hidden sm:inline">خط:</span>
+                <div class="flex items-center gap-1" id="lasso-recolor-swatches">
+                    <button data-recolor="transparent" class="w-4 h-4 rounded-full border border-slate-300 bg-white flex items-center justify-center text-[9px] text-red-500 font-bold hover:scale-110 transition" title="بی‌رنگ (حذف خط دور)">╱</button>
+                    <button data-recolor="#0F172A" class="w-4 h-4 rounded-full bg-[#0F172A] hover:scale-110 transition"></button>
+                    <button data-recolor="#1D4ED8" class="w-4 h-4 rounded-full bg-[#1D4ED8] hover:scale-110 transition"></button>
+                    <button data-recolor="#DC2626" class="w-4 h-4 rounded-full bg-[#DC2626] hover:scale-110 transition"></button>
+                    <button data-recolor="#047857" class="w-4 h-4 rounded-full bg-[#047857] hover:scale-110 transition"></button>
+                    <button data-recolor="#7C3AED" class="w-4 h-4 rounded-full bg-[#7C3AED] hover:scale-110 transition"></button>
+                    <button data-recolor="#FACC15" class="w-4 h-4 rounded-full bg-[#FACC15] border border-slate-300 hover:scale-110 transition"></button>
+                </div>
+                <div class="h-4 w-[1px] bg-slate-200"></div>
+                <span class="text-[11px] font-medium text-slate-500 pl-1 border-l border-slate-200 hidden sm:inline">درون:</span>
+                <div class="flex items-center gap-1" id="lasso-refill-swatches">
+                    <button data-refill="transparent" class="w-4 h-4 rounded-full border border-slate-300 bg-white flex items-center justify-center text-[9px] text-red-500 font-bold hover:scale-110 transition" title="داخل بی‌رنگ (توخالی)">╱</button>
+                    <button data-refill="#0F172A" class="w-4 h-4 rounded-full bg-[#0F172A] hover:scale-110 transition"></button>
+                    <button data-refill="#DBEAFE" class="w-4 h-4 rounded-full bg-[#DBEAFE] border border-blue-300 hover:scale-110 transition"></button>
+                    <button data-refill="#FEE2E2" class="w-4 h-4 rounded-full bg-[#FEE2E2] border border-red-300 hover:scale-110 transition"></button>
+                    <button data-refill="#D1FAE5" class="w-4 h-4 rounded-full bg-[#D1FAE5] border border-emerald-300 hover:scale-110 transition"></button>
+                    <button data-refill="#FEF08A" class="w-4 h-4 rounded-full bg-[#FEF08A] border border-yellow-400 hover:scale-110 transition"></button>
+                </div>
+                <div class="h-4 w-[1px] bg-slate-200"></div>
+                <!-- Direct Scale & Stroke Size Controls inside Selection Bar -->
                 <div class="flex items-center gap-1">
-                    <button id="btn-text-bold" class="px-2 py-0.5 text-xs border border-slate-200 rounded hover:bg-slate-100 font-bold" title="ضخیم (Bold)">B</button>
-                    <button id="btn-text-size-down" class="px-1.5 py-0.5 text-xs border border-slate-200 rounded hover:bg-slate-100" title="کاهش اندازه">−</button>
-                    <span id="label-text-size" class="text-xs font-medium px-1">۱۸</span>
-                    <button id="btn-text-size-up" class="px-1.5 py-0.5 text-xs border border-slate-200 rounded hover:bg-slate-100" title="افزایش اندازه">+</button>
+                    <span class="text-[10px] text-slate-500">سایز:</span>
+                    <button id="btn-selection-scale-down" class="px-1.5 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 rounded font-bold text-slate-700" title="کوچک کردن شیء انتخابی">−</button>
+                    <button id="btn-selection-scale-up" class="px-1.5 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 rounded font-bold text-slate-700" title="بزرگ کردن شیء انتخابی">+</button>
+                </div>
+                <div class="h-4 w-[1px] bg-slate-200"></div>
+                <button id="btn-selection-edit-text" class="hidden px-2 py-0.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50 rounded transition">ویرایش متن</button>
+                <button id="btn-selection-delete" class="px-2 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-50 rounded flex items-center gap-1 transition">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    حذف
+                </button>
+            </div>
+
+            <!-- Floating Text Editor Popover (For creating/editing vector text boxes on canvas) -->
+            <div id="text-editor-popover" class="hidden absolute z-40 bg-white border border-slate-300 shadow-xl rounded-lg p-2.5 w-72">
+                <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100">
+                    <span class="text-xs font-semibold text-slate-700">جعبه متن شناور</span>
+                    <div class="flex items-center gap-1">
+                        <button id="btn-text-bold" class="px-2 py-0.5 text-xs border border-slate-200 rounded hover:bg-slate-100 font-bold" title="ضخیم (Bold)">B</button>
+                        <button id="btn-text-size-down" class="px-1.5 py-0.5 text-xs border border-slate-200 rounded hover:bg-slate-100" title="کاهش اندازه">−</button>
+                        <span id="label-text-size" class="text-xs font-medium px-1">۱۸</span>
+                        <button id="btn-text-size-up" class="px-1.5 py-0.5 text-xs border border-slate-200 rounded hover:bg-slate-100" title="افزایش اندازه">+</button>
+                    </div>
+                </div>
+                <textarea id="textarea-floating" rows="3" class="w-full text-sm p-2 border border-slate-200 rounded focus:outline-none focus:border-blue-500 resize-none" placeholder="متن خود را بنویسید..."></textarea>
+                <div class="flex justify-end gap-1.5 mt-2">
+                    <button id="btn-text-cancel" class="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded">لغو</button>
+                    <button id="btn-text-confirm" class="px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded font-medium">ثبت روی بوم</button>
                 </div>
             </div>
-            <textarea id="textarea-floating" rows="3" class="w-full text-sm p-2 border border-slate-200 rounded focus:outline-none focus:border-blue-500 resize-none" placeholder="متن خود را بنویسید..."></textarea>
-            <div class="flex justify-end gap-1.5 mt-2">
-                <button id="btn-text-cancel" class="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded">لغو</button>
-                <button id="btn-text-confirm" class="px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded font-medium">ثبت روی بوم</button>
-            </div>
+        </div>
+
+        <!-- Floating Quick Page Scroll Buttons (Helpful on Windows Tablet when using Stylus) -->
+        <div class="fixed bottom-16 md:bottom-4 right-3 z-30 flex flex-col gap-1.5 bg-white/95 border border-slate-200 shadow-md rounded-xl p-1">
+            <button id="btn-scroll-up" class="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition" title="اسکرول به بالا">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+            </button>
+            <button id="btn-scroll-down" class="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition" title="اسکرول به پایین برگه">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
         </div>
     </main>
 
@@ -475,10 +511,10 @@
             <div class="pt-2 border-t border-slate-100">
                 <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
                     <span>شدت زیبانویسی و صاف‌ساز خط:</span>
-                    <span id="slider-streamline-val" class="text-blue-600 font-semibold">۵۰٪</span>
+                    <span id="slider-streamline-val" class="text-blue-600 font-semibold">۳۵٪</span>
                 </div>
-                <input id="slider-streamline" type="range" min="0" max="100" value="50" class="w-full accent-blue-600">
-                <p class="text-[10px] text-slate-400 mt-1">حفظ هوشمند گردی حروف فارسی (م، و، س) + حذف لرزش دست</p>
+                <input id="slider-streamline" type="range" min="0" max="100" value="35" class="w-full accent-blue-600">
+                <p class="text-[10px] text-slate-400 mt-1">حفظ ۱۰۰٪ گردیِ «م» و پر کردن دایره + حذف لرزش دست</p>
             </div>
 
             <div class="pt-2 border-t border-slate-100">
@@ -491,10 +527,10 @@
         </div>
     </div>
 
-    <!-- Popover: Geometric Shapes Selector -->
-    <div id="popover-shapes" class="hidden fixed top-[140px] left-[72px] z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-3 w-64">
+    <!-- Popover: Geometric Shapes Selector (With Independent Stroke & Fill Color Controls) -->
+    <div id="popover-shapes" class="hidden fixed top-[110px] left-[72px] z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-3.5 w-72">
         <div class="text-xs font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">رسم اشکال هندسی وکتوری (بکشید و رها کنید)</div>
-        <div class="grid grid-cols-3 gap-2" id="shapes-grid">
+        <div class="grid grid-cols-3 gap-1.5 mb-3" id="shapes-grid">
             <button data-shape="rect" class="shape-item p-2 border border-blue-200 bg-blue-50 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-50">
                 <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"></rect></svg>
                 <span class="text-[10px] text-slate-600">مستطیل</span>
@@ -519,6 +555,32 @@
                 <svg class="w-5 h-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="12" x2="20" y2="12"></line><polyline points="14 6 20 12 14 18"></polyline></svg>
                 <span class="text-[10px] text-slate-600">فلش</span>
             </button>
+        </div>
+
+        <!-- Shape Stroke Color Picker (Includes Transparent/None) -->
+        <div class="pt-2 border-t border-slate-100 mb-2.5">
+            <span class="block text-[11px] font-medium text-slate-700 mb-1.5">رنگ خط دور شکل (حاشیه):</span>
+            <div class="flex items-center gap-2" id="shape-stroke-swatches">
+                <button data-shape-stroke="transparent" class="w-5 h-5 rounded-full border border-slate-300 bg-white flex items-center justify-center text-[10px] text-red-500 font-bold" title="بدون خط دور (بی‌رنگ)">╱</button>
+                <button data-shape-stroke="#0F172A" class="color-swatch active w-5 h-5 rounded-full bg-[#0F172A]" title="مشکی"></button>
+                <button data-shape-stroke="#1D4ED8" class="color-swatch w-5 h-5 rounded-full bg-[#1D4ED8]" title="آبی"></button>
+                <button data-shape-stroke="#DC2626" class="color-swatch w-5 h-5 rounded-full bg-[#DC2626]" title="قرمز"></button>
+                <button data-shape-stroke="#047857" class="color-swatch w-5 h-5 rounded-full bg-[#047857]" title="سبز"></button>
+                <button data-shape-stroke="#7C3AED" class="color-swatch w-5 h-5 rounded-full bg-[#7C3AED]" title="بنفش"></button>
+            </div>
+        </div>
+
+        <!-- Shape Fill Color Picker (Includes Transparent/None) -->
+        <div class="pt-2 border-t border-slate-100">
+            <span class="block text-[11px] font-medium text-slate-700 mb-1.5">رنگ داخل شکل (توپر یا بی‌رنگ):</span>
+            <div class="flex items-center gap-2" id="shape-fill-swatches">
+                <button data-shape-fill="transparent" class="color-swatch active w-5 h-5 rounded-full border border-slate-300 bg-white flex items-center justify-center text-[10px] text-red-500 font-bold" title="داخل بی‌رنگ (توخالی)">╱</button>
+                <button data-shape-fill="#0F172A" class="color-swatch w-5 h-5 rounded-full bg-[#0F172A]" title="مشکی توپر"></button>
+                <button data-shape-fill="#DBEAFE" class="color-swatch w-5 h-5 rounded-full bg-[#DBEAFE] border border-blue-300" title="آبی ملایم"></button>
+                <button data-shape-fill="#FEE2E2" class="color-swatch w-5 h-5 rounded-full bg-[#FEE2E2] border border-red-300" title="قرمز ملایم"></button>
+                <button data-shape-fill="#D1FAE5" class="color-swatch w-5 h-5 rounded-full bg-[#D1FAE5] border border-emerald-300" title="سبز ملایم"></button>
+                <button data-shape-fill="#FEF08A" class="color-swatch w-5 h-5 rounded-full bg-[#FEF08A] border border-yellow-400" title="زرد ملایم"></button>
+            </div>
         </div>
     </div>
 
@@ -907,8 +969,8 @@
          * ============================================================================
          * 4. MATHEMATICAL INK BEAUTIFIER & STREAMLINE ENGINE
          * ============================================================================
-         * Curvature-Aware Smoothing specifically tuned for Persian script:
-         * Preserves tight micro-loops (like 'م', 'و', 'ف') and sharp teeth ('س', 'ش')
+         * Micro-Detail & Loop Preserving Smoothing specifically tuned for Persian script:
+         * Preserves tight micro-loops (like 'م', 'و', 'ف'), solid circle filling, and sharp teeth ('س', 'ش')
          * while smoothing out hand jitter on longer strokes.
          */
         class InkBeautifier {
@@ -916,97 +978,87 @@
              * @param {Array<{x:number, y:number, p:number}>} rawPoints
              * @param {number} intensity (0 to 100)
              */
-            static beautify(rawPoints, intensity = 50) {
+            static beautify(rawPoints, intensity = 35) {
                 if (!rawPoints || rawPoints.length < 3 || intensity <= 0) {
                     return rawPoints.map(pt => ({ ...pt }));
                 }
 
-                const factor = intensity / 100;
+                // Calculate total path length and bounding box of the stroke
+                let pathLength = 0;
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (let i = 0; i < rawPoints.length; i++) {
+                    const p = rawPoints[i];
+                    if (p.x < minX) minX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y > maxY) maxY = p.y;
+                    if (i > 0) {
+                        pathLength += Math.hypot(p.x - rawPoints[i - 1].x, p.y - rawPoints[i - 1].y);
+                    }
+                }
+                const diag = Math.hypot(maxX - minX, maxY - minY);
 
-                // Step 1: Ultra-fine sub-pixel deduplication (0.35px) so tiny Persian loops ('م', 'و') are NEVER lost
+                // CRITICAL FOR 'م' AND COLORING/FILLING SMALL CIRCLES:
+                // If the stroke is confined to a small area (< 26px) or has high density (pathLength > diag * 2.2, e.g. scribbling/filling a circle or loop of 'م'),
+                // DO NOT shrink or flatten the points! Return exact raw points so loops and fills stay 100% intact.
+                if (diag < 22 || (diag < 45 && pathLength > diag * 2.1)) {
+                    return rawPoints.map(pt => ({ ...pt }));
+                }
+
+                const factor = (intensity / 100) * 0.18;
+
+                // Ultra-fine deduplication (0.15px) only for identical overlapping sensor noise
                 const filtered = [rawPoints[0]];
                 for (let i = 1; i < rawPoints.length - 1; i++) {
                     const prev = filtered[filtered.length - 1];
                     const curr = rawPoints[i];
-                    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) >= 0.35) {
+                    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) >= 0.15) {
                         filtered.push(curr);
                     }
                 }
                 filtered.push(rawPoints[rawPoints.length - 1]);
 
-                if (filtered.length < 3) return filtered;
+                if (filtered.length < 4) return filtered;
 
-                // Step 2: Curvature-Aware Adaptive Smoothing
-                // Detects tight turns/loops and reduces smoothing weight to 0 on sharp curves so loops don't shrink!
-                const passes = intensity > 70 ? 2 : 1;
-                let pts = filtered.map(p => ({ ...p }));
+                // Single-pass Curvature-Locked Smoothing:
+                // Only smooths segments that are long (> 4px) and nearly straight (cosTheta > 0.92).
+                // Any curve, loop ('م'), or tooth ('س') is 100% locked to exact stylus coordinates!
+                const nextPts = [filtered[0]];
+                for (let i = 1; i < filtered.length - 1; i++) {
+                    const prev = filtered[i - 1];
+                    const curr = filtered[i];
+                    const next = filtered[i + 1];
 
-                for (let pass = 0; pass < passes; pass++) {
-                    const nextPts = [pts[0]];
-                    for (let i = 1; i < pts.length - 1; i++) {
-                        const prev = pts[i - 1];
-                        const curr = pts[i];
-                        const next = pts[i + 1];
+                    const vx1 = curr.x - prev.x;
+                    const vy1 = curr.y - prev.y;
+                    const vx2 = next.x - curr.x;
+                    const vy2 = next.y - curr.y;
 
-                        const vx1 = curr.x - prev.x;
-                        const vy1 = curr.y - prev.y;
-                        const vx2 = next.x - curr.x;
-                        const vy2 = next.y - curr.y;
+                    const len1 = Math.hypot(vx1, vy1);
+                    const len2 = Math.hypot(vx2, vy2);
 
-                        const len1 = Math.hypot(vx1, vy1);
-                        const len2 = Math.hypot(vx2, vy2);
-
-                        let localWeight = 0.22 * factor;
-
-                        if (len1 > 0.05 && len2 > 0.05) {
-                            // Cosine of turning angle between segments (-1 = 180deg sharp turn, +1 = straight line)
-                            const cosTheta = (vx1 * vx2 + vy1 * vy2) / (len1 * len2);
-                            // If turning sharply (like inside the loop of 'م' or teeth of 'س'), lock the point in place
-                            if (cosTheta < 0.88) {
-                                const straightness = Math.max(0, (cosTheta - 0.25) / 0.63);
-                                localWeight *= (straightness * straightness);
-                            }
-                            // Also protect very short slow strokes (micro-details) from shrinking
-                            if (len1 + len2 < 5.5) {
-                                localWeight *= 0.25;
-                            }
+                    let w = 0;
+                    if (len1 > 2.2 && len2 > 2.2) {
+                        const cosTheta = (vx1 * vx2 + vy1 * vy2) / (len1 * len2);
+                        // Only apply smoothing if the stroke is moving in a relatively straight line
+                        if (cosTheta > 0.90) {
+                            w = factor * ((cosTheta - 0.90) / 0.10);
                         }
-
-                        nextPts.push({
-                            x: curr.x * (1 - 2 * localWeight) + (prev.x + next.x) * localWeight,
-                            y: curr.y * (1 - 2 * localWeight) + (prev.y + next.y) * localWeight,
-                            p: curr.p
-                        });
                     }
-                    nextPts.push(pts[pts.length - 1]);
-                    pts = nextPts;
-                }
 
-                // Step 3: Gentle Midpoint Subdivision ONLY on long straight segments (> 8px) to make curves silky
-                // without cutting corners of small Persian letters
-                if (intensity >= 35) {
-                    const refined = [pts[0]];
-                    for (let i = 0; i < pts.length - 1; i++) {
-                        const p0 = pts[i];
-                        const p1 = pts[i + 1];
-                        const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-                        if (dist > 8) {
-                            refined.push({
-                                x: (p0.x + p1.x) * 0.5,
-                                y: (p0.y + p1.y) * 0.5,
-                                p: (p0.p + p1.p) * 0.5
-                            });
-                        }
-                        refined.push(p1);
-                    }
-                    pts = refined;
+                    nextPts.push({
+                        x: curr.x * (1 - 2 * w) + (prev.x + next.x) * w,
+                        y: curr.y * (1 - 2 * w) + (prev.y + next.y) * w,
+                        p: curr.p
+                    });
                 }
+                nextPts.push(filtered[filtered.length - 1]);
 
-                return pts;
+                return nextPts;
             }
 
             /**
-             * Renders a vector stroke smoothly using Quadratic Bezier midpoints
+             * Renders a vector stroke or geometric shape with support for both Stroke Color and Fill Color
              */
             static renderSmoothStroke(ctx, stroke) {
                 const pts = stroke.points;
@@ -1015,14 +1067,20 @@
                 ctx.save();
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
-                ctx.strokeStyle = stroke.color;
-                ctx.lineWidth = stroke.size;
+
+                const hasFill = stroke.fillColor && stroke.fillColor !== 'transparent';
+                const hasStroke = !stroke.color || stroke.color !== 'transparent';
+
+                ctx.strokeStyle = hasStroke ? (stroke.color || '#0F172A') : 'rgba(0,0,0,0)';
+                ctx.lineWidth = stroke.size || 3;
 
                 ctx.beginPath();
                 if (pts.length === 1) {
-                    ctx.arc(pts[0].x, pts[0].y, stroke.size / 2, 0, Math.PI * 2);
-                    ctx.fillStyle = stroke.color;
-                    ctx.fill();
+                    if (hasStroke) {
+                        ctx.arc(pts[0].x, pts[0].y, (stroke.size || 3) / 2, 0, Math.PI * 2);
+                        ctx.fillStyle = stroke.color || '#0F172A';
+                        ctx.fill();
+                    }
                     ctx.restore();
                     return;
                 }
@@ -1033,20 +1091,39 @@
                     for (let i = 1; i < pts.length; i++) {
                         ctx.lineTo(pts[i].x, pts[i].y);
                     }
-                    ctx.stroke();
+                    if (hasFill && pts.length >= 3) {
+                        ctx.fillStyle = stroke.fillColor;
+                        ctx.fill();
+                    }
+                    if (hasStroke) {
+                        ctx.stroke();
+                    }
                     ctx.restore();
                     return;
                 }
 
                 ctx.moveTo(pts[0].x, pts[0].y);
                 for (let i = 1; i < pts.length - 1; i++) {
-                    const midX = (pts[i].x + pts[i + 1].x) / 2;
-                    const midY = (pts[i].y + pts[i + 1].y) / 2;
-                    ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+                    const dist = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+                    // For tight micro-loops ('م') or dense coloring (< 3.5px), connect directly to exact point so loops never flatten!
+                    if (dist < 3.5) {
+                        ctx.lineTo(pts[i].x, pts[i].y);
+                    } else {
+                        const midX = (pts[i].x + pts[i + 1].x) / 2;
+                        const midY = (pts[i].y + pts[i + 1].y) / 2;
+                        ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+                    }
                 }
                 const last = pts[pts.length - 1];
                 ctx.lineTo(last.x, last.y);
-                ctx.stroke();
+
+                if (hasFill && pts.length >= 3) {
+                    ctx.fillStyle = stroke.fillColor;
+                    ctx.fill();
+                }
+                if (hasStroke) {
+                    ctx.stroke();
+                }
                 ctx.restore();
             }
         }
@@ -1155,16 +1232,18 @@
             activeColor: '#0F172A',
             penSize: 3,
             highlighterSize: 18,
-            streamlineIntensity: 50,
+            streamlineIntensity: 35,
             straightLineMode: false,   // Ruler mode for Pen & Highlighter
             activeShape: 'rect',       // 'rect' | 'square' | 'circle' | 'triangle' | 'line' | 'arrow'
+            shapeStrokeColor: '#0F172A',
+            shapeFillColor: 'transparent',
             eraserMode: 'stroke',      // 'stroke' | 'partial'
             stylusOnly: false,
             activeSymbol: 'check',
             paperType: 'lined',        // 'lined' | 'grid' | 'dotted' | 'blank'
 
             // Current Page Vector Data
-            strokes: [],               // Array of { id, tool: 'pen'|'highlighter', color, size, points: [{x,y,p}], isSharpGeometry }
+            strokes: [],               // Array of { id, tool: 'pen'|'highlighter', color, fillColor, size, points: [{x,y,p}], isSharpGeometry }
             texts: [],                 // Array of { id, x, y, text, fontSize, color, bold, rotation }
             symbols: [],               // Array of { id, x, y, symbolType, size, color, rotation }
             priorities: ['', '', ''],
@@ -1203,6 +1282,7 @@
 
         // DOM Elements
         const viewport = document.getElementById('canvas-viewport');
+        const paperStage = document.getElementById('paper-stage');
         const canvasPdf = document.getElementById('canvas-pdf');
         const canvasHighlighter = document.getElementById('canvas-highlighter');
         const canvasInk = document.getElementById('canvas-ink');
@@ -1213,40 +1293,57 @@
         // Enable low-latency desynchronized context where supported for Windows tablets
         const ctxInteraction = canvasInteraction.getContext('2d', { desynchronized: true }) || canvasInteraction.getContext('2d');
 
-        // Prevent context menu popup when pressing stylus barrel button on Windows 10
+        // Prevent context menu popup when pressing stylus barrel button or holding pen in small circles on Windows 10
         canvasInteraction.addEventListener('contextmenu', e => e.preventDefault());
 
-        let dpr = 1;
-        let cachedCanvasRect = { left: 0, top: 0, width: 1000, height: 800 };
+        let dpr = Math.min(window.devicePixelRatio || 1, 2);
+        let cachedCanvasRect = { left: 0, top: 0, width: 1000, height: 1850 };
 
         function uid() {
             return 'el_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
         }
 
         /**
-         * Ultra-Fast 1:1 Hardware Canvas Sizing (Guarantees instant 60fps response on Windows 10 Fujitsu tablets)
+         * HYBRID DPI SIZING:
+         * - Static Layers (Ink, Highlighter, PDF) use crisp Retina High-DPI (up to 2x) for razor-sharp text & handwriting quality.
+         * - Active Interaction Layer uses 1:1 hardware mapping for zero-latency 60fps stylus tracking on Windows 10 tablets.
          */
         function resizeCanvases() {
-            dpr = 1; // 1:1 native pixel mapping eliminates 2.25x GPU pixel fill bottleneck on tablets
-            const rect = viewport.getBoundingClientRect();
+            dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2);
+            const rect = paperStage.getBoundingClientRect();
             cachedCanvasRect = rect;
-            [canvasPdf, canvasHighlighter, canvasInk, canvasInteraction].forEach(c => {
-                c.width = rect.width;
-                c.height = rect.height;
+
+            // High-DPI static canvases for crisp handwriting quality
+            [canvasPdf, canvasHighlighter, canvasInk].forEach(c => {
+                c.width = rect.width * dpr;
+                c.height = rect.height * dpr;
                 const ctx = c.getContext('2d');
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             });
-            // Pre-configure interaction context properties once
+
+            // 1:1 ultra-fast interaction canvas for zero-lag live stylus drawing
+            canvasInteraction.width = rect.width;
+            canvasInteraction.height = rect.height;
+            ctxInteraction.setTransform(1, 0, 0, 1, 0, 0);
             ctxInteraction.lineCap = 'round';
             ctxInteraction.lineJoin = 'round';
+
             renderPdfBackground();
             renderAllLayers();
         }
 
         window.addEventListener('resize', resizeCanvases);
-        window.addEventListener('scroll', () => {
-            cachedCanvasRect = canvasInteraction.getBoundingClientRect();
+        viewport.addEventListener('scroll', () => {
+            cachedCanvasRect = paperStage.getBoundingClientRect();
         }, { passive: true });
+
+        // Quick Page Scroll Buttons
+        document.getElementById('btn-scroll-up').addEventListener('click', () => {
+            viewport.scrollBy({ top: -380, behavior: 'smooth' });
+        });
+        document.getElementById('btn-scroll-down').addEventListener('click', () => {
+            viewport.scrollBy({ top: 380, behavior: 'smooth' });
+        });
 
         /**
          * PDF Annotator Engine (Render PDF Page onto Layer 0 Canvas)
@@ -1258,7 +1355,7 @@
         async function loadPdfFromBase64(base64Data, pageNum = 1) {
             if (!base64Data || !window.pdfjsLib) {
                 AppState.pdfDocInstance = null;
-                ctxPdf.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
+                ctxPdf.clearRect(0, 0, paperStage.clientWidth, paperStage.clientHeight);
                 document.getElementById('pdf-controls-bar').classList.add('hidden');
                 document.getElementById('pdf-controls-bar').classList.remove('flex');
                 return;
@@ -1288,19 +1385,19 @@
         }
 
         async function renderPdfBackground() {
-            const w = viewport.clientWidth;
-            const h = viewport.clientHeight;
+            const w = paperStage.clientWidth;
+            const h = paperStage.clientHeight;
             ctxPdf.clearRect(0, 0, w, h);
             if (!AppState.pdfDocInstance) return;
 
             try {
                 const page = await AppState.pdfDocInstance.getPage(AppState.pdfPageNum);
                 const unscaledViewport = page.getViewport({ scale: 1 });
-                const scale = Math.min((w - 80) / unscaledViewport.width, (h - 20) / unscaledViewport.height);
+                const scale = Math.min((w - 80) / unscaledViewport.width, (h - 40) / unscaledViewport.height);
                 const scaledViewport = page.getViewport({ scale });
 
                 const offsetX = (w - scaledViewport.width) / 2;
-                const offsetY = (h - scaledViewport.height) / 2;
+                const offsetY = 20;
 
                 ctxPdf.save();
                 ctxPdf.translate(offsetX, offsetY);
@@ -1398,8 +1495,8 @@
          * ============================================================================
          */
         function renderAllLayers() {
-            const w = viewport.clientWidth;
-            const h = viewport.clientHeight;
+            const w = paperStage.clientWidth;
+            const h = paperStage.clientHeight;
 
             ctxHighlighter.clearRect(0, 0, w, h);
             ctxInk.clearRect(0, 0, w, h);
@@ -1415,7 +1512,7 @@
                 }
             }
 
-            // 3. Render Crisp Pen Strokes on Ink Canvas
+            // 3. Render Crisp Pen Strokes & Geometric Shapes on Ink Canvas
             for (const s of AppState.strokes) {
                 if (s.tool !== 'highlighter') {
                     InkBeautifier.renderSmoothStroke(ctxInk, s);
@@ -1449,11 +1546,11 @@
             ctx.fillStyle = '#94A3B8';
             ctx.font = '10px Vazirmatn';
             ctx.textAlign = 'center';
-            const hours = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
-            const stepY = Math.max(32, Math.floor((h - 24) / hours.length));
+            const hours = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+            const stepY = 64;
             hours.forEach((hr, idx) => {
-                const y = 24 + idx * stepY;
-                if (y < h - 10) {
+                const y = 32 + idx * stepY;
+                if (y < h - 20) {
                     ctx.fillText(toPersianDigits(String(hr).padStart(2, '0') + ':۰۰'), w - 21, y);
                 }
             });
@@ -1596,8 +1693,8 @@
 
             // Position context bar neatly above or below bounding box
             const b = AppState.selectionBounds;
-            const topY = Math.max(12, b.y - 54);
-            const clampedX = Math.min(Math.max(160, b.cx), viewport.clientWidth - 160);
+            const topY = Math.max(12, b.y - 58);
+            const clampedX = Math.min(Math.max(180, b.cx), paperStage.clientWidth - 180);
             bar.style.top = `${topY}px`;
             bar.style.left = `${clampedX}px`;
         }
@@ -1696,8 +1793,8 @@
         }
 
         function renderInteractionOverlay() {
-            const w = viewport.clientWidth;
-            const h = viewport.clientHeight;
+            const w = paperStage.clientWidth;
+            const h = paperStage.clientHeight;
             ctxInteraction.clearRect(0, 0, w, h);
             canvasInteraction.style.opacity = '1';
 
@@ -1708,6 +1805,9 @@
                 }
                 let previewPts = AppState.currentRawPoints;
                 let sharp = false;
+                let strokeCol = AppState.activeColor;
+                let fillCol = 'transparent';
+
                 if (AppState.activeTool === 'shape' && AppState.currentRawPoints.length >= 2) {
                     previewPts = buildShapeVectorPoints(
                         AppState.activeShape,
@@ -1715,6 +1815,8 @@
                         AppState.currentRawPoints[AppState.currentRawPoints.length - 1]
                     );
                     sharp = AppState.activeShape !== 'circle';
+                    strokeCol = AppState.shapeStrokeColor;
+                    fillCol = (AppState.activeShape === 'line' || AppState.activeShape === 'arrow') ? 'transparent' : AppState.shapeFillColor;
                 } else if (AppState.straightLineMode && AppState.currentRawPoints.length >= 2) {
                     previewPts = [
                         AppState.currentRawPoints[0],
@@ -1723,7 +1825,8 @@
                     sharp = true;
                 }
                 InkBeautifier.renderSmoothStroke(ctxInteraction, {
-                    color: AppState.activeColor,
+                    color: strokeCol,
+                    fillColor: fillCol,
                     size: AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize,
                     points: previewPts,
                     isSharpGeometry: sharp
@@ -1808,20 +1911,20 @@
         }
 
         /**
-         * Detects if Windows 10 Stylus Barrel Button or Eraser Tail is pressed:
-         * - e.button === 5 or (e.buttons & 32): Standard Windows Ink Eraser tip / side button
-         * - e.button === 2 or (e.buttons & 2): Wacom / Fujitsu Stylus Barrel Button mapped to Right-Click
-         * - e.pointerType === 'eraser': Dedicated eraser pointer type
+         * Detects if Windows 10 Stylus Barrel Button or Eraser Tail is pressed AT POINTERDOWN:
+         * - e.pointerType === 'eraser': Dedicated eraser tail
+         * - e.button === 5 or (e.buttons & 32): Standard Windows Ink Barrel Button / Eraser
+         * - e.button === 2: Wacom / Fujitsu Stylus Barrel Button pressed when touching screen
          */
         function isStylusEraserButtonActive(e) {
             if (e.pointerType === 'eraser') return true;
             if (e.button === 5 || (e.buttons & 32) === 32) return true;
-            if ((e.pointerType === 'pen' || e.pointerType === 'mouse') && (e.button === 2 || (e.buttons & 2) === 2)) return true;
+            if ((e.pointerType === 'pen' || e.pointerType === 'mouse') && e.button === 2) return true;
             return false;
         }
 
         canvasInteraction.addEventListener('pointerdown', (e) => {
-            // Palm Rejection (Stylus Only Mode)
+            // If Stylus Only Mode is OFF and user touches with finger, allow smooth vertical page scrolling if not drawing
             if (AppState.stylusOnly && e.pointerType === 'touch') {
                 return;
             }
@@ -1835,7 +1938,7 @@
             document.getElementById('popover-shapes').classList.add('hidden');
 
             e.preventDefault();
-            cachedCanvasRect = canvasInteraction.getBoundingClientRect();
+            cachedCanvasRect = paperStage.getBoundingClientRect();
             try {
                 if (canvasInteraction.setPointerCapture) {
                     canvasInteraction.setPointerCapture(e.pointerId);
@@ -1936,8 +2039,8 @@
                 AppState.lastRenderedIndex = 0;
 
                 const strokeWidth = AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize;
-                ctxInteraction.strokeStyle = AppState.activeColor;
-                ctxInteraction.fillStyle = AppState.activeColor;
+                ctxInteraction.strokeStyle = AppState.activeTool === 'shape' ? AppState.shapeStrokeColor : AppState.activeColor;
+                ctxInteraction.fillStyle = AppState.activeTool === 'shape' ? AppState.shapeStrokeColor : AppState.activeColor;
                 ctxInteraction.lineWidth = strokeWidth;
                 ctxInteraction.lineCap = 'round';
                 ctxInteraction.lineJoin = 'round';
@@ -1959,8 +2062,9 @@
             if (AppState.stylusOnly && e.pointerType === 'touch') return;
             e.preventDefault();
 
-            // Check if user pressed barrel button mid-stroke on Windows tablet
-            if (!AppState.tempEraserActive && isStylusEraserButtonActive(e)) {
+            // NOTE: Do NOT switch to eraser on e.buttons === 2 mid-stroke because Windows 10 hold-gesture
+            // fires buttons=2 when drawing tight loops like 'م' or coloring small circles!
+            if (!AppState.tempEraserActive && (e.pointerType === 'eraser' || (e.buttons & 32) === 32)) {
                 AppState.tempEraserActive = true;
                 AppState.currentRawPoints = [];
                 ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
@@ -2008,7 +2112,7 @@
 
         function drawEraserCursorPreview(pt) {
             const r = Math.max(12, AppState.penSize * 2.2);
-            ctxInteraction.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
+            ctxInteraction.clearRect(0, 0, paperStage.clientWidth, paperStage.clientHeight);
             ctxInteraction.save();
             ctxInteraction.strokeStyle = '#EF4444';
             ctxInteraction.fillStyle = 'rgba(239, 68, 68, 0.12)';
@@ -2029,7 +2133,7 @@
             // If user was erasing via Stylus Barrel Button or Eraser Tool, finish and automatically revert to Pen
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
                 AppState.tempEraserActive = false;
-                ctxInteraction.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
+                ctxInteraction.clearRect(0, 0, paperStage.clientWidth, paperStage.clientHeight);
                 scheduleSavePage();
                 return;
             }
@@ -2039,6 +2143,8 @@
                     pushUndoState();
                     let finalPoints = [];
                     let isSharpGeometry = false;
+                    let strokeColor = AppState.activeColor;
+                    let fillColor = 'transparent';
 
                     if (AppState.activeTool === 'shape' && AppState.currentRawPoints.length >= 2) {
                         finalPoints = buildShapeVectorPoints(
@@ -2047,6 +2153,8 @@
                             AppState.currentRawPoints[AppState.currentRawPoints.length - 1]
                         );
                         isSharpGeometry = AppState.activeShape !== 'circle';
+                        strokeColor = AppState.shapeStrokeColor;
+                        fillColor = (AppState.activeShape === 'line' || AppState.activeShape === 'arrow') ? 'transparent' : AppState.shapeFillColor;
                     } else if (AppState.straightLineMode && AppState.currentRawPoints.length >= 2) {
                         finalPoints = [
                             AppState.currentRawPoints[0],
@@ -2054,7 +2162,7 @@
                         ];
                         isSharpGeometry = true;
                     } else {
-                        // Apply Ink Beautifier & Streamline Engine
+                        // Apply Ink Beautifier & Streamline Engine (Preserves 'م' and solid circle fills)
                         finalPoints = InkBeautifier.beautify(
                             AppState.currentRawPoints,
                             AppState.streamlineIntensity
@@ -2064,7 +2172,8 @@
                     AppState.strokes.push({
                         id: uid(),
                         tool: AppState.activeTool === 'highlighter' ? 'highlighter' : 'pen',
-                        color: AppState.activeColor,
+                        color: strokeColor,
+                        fillColor: fillColor,
                         size: AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize,
                         points: finalPoints,
                         isSharpGeometry
@@ -2284,7 +2393,7 @@
 
         function openTextEditor(x, y, existingItem = null) {
             AppState.editingTextId = existingItem ? existingItem.id : null;
-            AppState.pendingTextPos = { x: Math.min(x, viewport.clientWidth - 300), y: Math.min(y, viewport.clientHeight - 180) };
+            AppState.pendingTextPos = { x: Math.min(x, paperStage.clientWidth - 300), y: Math.min(y, paperStage.clientHeight - 180) };
             AppState.textDraftSize = existingItem ? existingItem.fontSize : 18;
             AppState.textDraftBold = existingItem ? Boolean(existingItem.bold) : false;
 
@@ -2330,33 +2439,33 @@
                         target.fontSize = AppState.textDraftSize;
                         target.bold = AppState.textDraftBold;
                     }
-                } else {
-                    AppState.texts.push({
-                        id: uid(),
-                        x: AppState.pendingTextPos.x,
-                        y: AppState.pendingTextPos.y,
-                        text: val,
-                        fontSize: AppState.textDraftSize,
-                        color: AppState.activeColor,
-                        bold: AppState.textDraftBold,
-                        rotation: 0
-                    });
-                }
-                renderAllLayers();
-                scheduleSavePage();
-            }
-            textPopover.classList.add('hidden');
-        });
-
-        // Recolor Selected Objects
+        // Recolor Selected Objects (Stroke Color)
         document.querySelectorAll('#lasso-recolor-swatches button').forEach(btn => {
             btn.addEventListener('click', () => {
                 const newColor = btn.getAttribute('data-recolor');
                 if (AppState.selectedIds.size === 0) return;
                 pushUndoState();
                 AppState.strokes.forEach(s => { if (AppState.selectedIds.has(s.id)) s.color = newColor; });
-                AppState.symbols.forEach(sym => { if (AppState.selectedIds.has(sym.id)) sym.color = newColor; });
-                AppState.texts.forEach(t => { if (AppState.selectedIds.has(t.id)) t.color = newColor; });
+                if (newColor !== 'transparent') {
+                    AppState.symbols.forEach(sym => { if (AppState.selectedIds.has(sym.id)) sym.color = newColor; });
+                    AppState.texts.forEach(t => { if (AppState.selectedIds.has(t.id)) t.color = newColor; });
+                }
+                renderAllLayers();
+                scheduleSavePage();
+            });
+        });
+
+        // Refill Selected Shapes / Strokes (Interior Fill Color or Transparent)
+        document.querySelectorAll('#lasso-refill-swatches button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const newFill = btn.getAttribute('data-refill');
+                if (AppState.selectedIds.size === 0) return;
+                pushUndoState();
+                AppState.strokes.forEach(s => {
+                    if (AppState.selectedIds.has(s.id)) {
+                        s.fillColor = newFill;
+                    }
+                });
                 renderAllLayers();
                 scheduleSavePage();
             });
@@ -2491,8 +2600,8 @@
         });
 
         function applyPaperClass() {
-            viewport.classList.remove('paper-lined', 'paper-grid', 'paper-dotted', 'paper-blank');
-            viewport.classList.add(`paper-${AppState.paperType}`);
+            paperStage.classList.remove('paper-lined', 'paper-grid', 'paper-dotted', 'paper-blank');
+            paperStage.classList.add(`paper-${AppState.paperType}`);
         }
 
         // Prev / Next / Today Navigation
@@ -2527,22 +2636,7 @@
                     document.getElementById('popover-shapes').classList.toggle('hidden');
                     document.getElementById('popover-symbols').classList.add('hidden');
                     document.getElementById('popover-stroke').classList.add('hidden');
-                } else {
-                    document.getElementById('popover-symbols').classList.add('hidden');
-                    document.getElementById('popover-shapes').classList.add('hidden');
-                }
-                renderAllLayers();
-            });
-        });
-
-        // Straight Line Ruler Mode Toggle (Works with Pen & Highlighter)
-        const btnStraightLine = document.getElementById('btn-straight-line');
-        btnStraightLine.addEventListener('click', () => {
-            AppState.straightLineMode = !AppState.straightLineMode;
-            btnStraightLine.classList.toggle('active', AppState.straightLineMode);
-        });
-
-        // Geometric Shape Picker
+        // Geometric Shape Picker & Shape Stroke/Fill Color Pickers
         document.querySelectorAll('#shapes-grid .shape-item').forEach(btn => {
             btn.addEventListener('click', () => {
                 AppState.activeShape = btn.getAttribute('data-shape');
@@ -2551,7 +2645,22 @@
                     b.classList.add('border-slate-200');
                 });
                 btn.classList.add('border-blue-200', 'bg-blue-50');
-                document.getElementById('popover-shapes').classList.add('hidden');
+            });
+        });
+
+        document.querySelectorAll('#shape-stroke-swatches button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                AppState.shapeStrokeColor = btn.getAttribute('data-shape-stroke');
+                document.querySelectorAll('#shape-stroke-swatches button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('#shape-fill-swatches button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                AppState.shapeFillColor = btn.getAttribute('data-shape-fill');
+                document.querySelectorAll('#shape-fill-swatches button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
             });
         });
 
@@ -2645,6 +2754,7 @@
         document.querySelectorAll('#color-palette .color-swatch').forEach(sw => {
             sw.addEventListener('click', () => {
                 AppState.activeColor = sw.getAttribute('data-color');
+                AppState.shapeStrokeColor = AppState.activeColor;
                 document.querySelectorAll('#color-palette .color-swatch').forEach(s => s.classList.remove('active'));
                 sw.classList.add('active');
             });
@@ -2828,11 +2938,11 @@
         }
 
         /**
-         * High-Resolution Composite PNG Exporter (Merges Paper Pattern, Header, Highlighter, Ink, Symbols & Texts)
+         * High-Resolution Composite PNG Exporter (Merges 2x Scrollable Paper Pattern, Header, Highlighter, Ink, Symbols & Texts)
          */
         document.getElementById('btn-export').addEventListener('click', () => {
-            const w = viewport.clientWidth;
-            const h = viewport.clientHeight + 56;
+            const w = paperStage.clientWidth;
+            const h = paperStage.clientHeight + 56;
             const exportCanvas = document.createElement('canvas');
             exportCanvas.width = w * dpr;
             exportCanvas.height = h * dpr;
