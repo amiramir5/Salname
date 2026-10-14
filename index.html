@@ -131,11 +131,10 @@
             align-items: center;
             justify-content: space-between;
             padding: 8px 4px;
-            background: rgba(255, 255, 255, 0.96);
-            backdrop-filter: blur(8px);
+            background: #FFFFFF;
             border: 1px solid #E2E8F0;
             border-radius: 16px;
-            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
             overflow-y: auto;
         }
 
@@ -375,7 +374,7 @@
         <button id="btn-stroke-settings" class="tool-btn p-1.5 rounded-xl text-[10px] font-bold text-slate-700 flex flex-col items-center gap-0.5 border border-slate-200 bg-slate-50 w-9" title="ضخامت قلم و شدت زیبانویسی">
             <span class="w-2 h-2 rounded-full bg-slate-800 inline-block"></span>
             <span id="label-stroke-size">۳</span>
-            <span class="hidden" id="label-streamline">۸۵٪</span>
+            <span class="hidden" id="label-streamline">۵۰٪</span>
         </button>
     </aside>
 
@@ -476,10 +475,10 @@
             <div class="pt-2 border-t border-slate-100">
                 <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
                     <span>شدت زیبانویسی و صاف‌ساز خط:</span>
-                    <span id="slider-streamline-val" class="text-blue-600 font-semibold">۸۵٪</span>
+                    <span id="slider-streamline-val" class="text-blue-600 font-semibold">۵۰٪</span>
                 </div>
-                <input id="slider-streamline" type="range" min="0" max="100" value="85" class="w-full accent-blue-600">
-                <p class="text-[10px] text-slate-400 mt-1">الگوریتم ترکیبی فیلتر لرزش دست + Chaikin و Catmull-Rom Spline</p>
+                <input id="slider-streamline" type="range" min="0" max="100" value="50" class="w-full accent-blue-600">
+                <p class="text-[10px] text-slate-400 mt-1">حفظ هوشمند گردی حروف فارسی (م، و، س) + حذف لرزش دست</p>
             </div>
 
             <div class="pt-2 border-t border-slate-100">
@@ -908,28 +907,28 @@
          * ============================================================================
          * 4. MATHEMATICAL INK BEAUTIFIER & STREAMLINE ENGINE
          * ============================================================================
-         * Converts raw jittery hand/stylus input into calligraphic, ultra-smooth curves
-         * immediately upon stroke completion.
+         * Curvature-Aware Smoothing specifically tuned for Persian script:
+         * Preserves tight micro-loops (like 'م', 'و', 'ف') and sharp teeth ('س', 'ش')
+         * while smoothing out hand jitter on longer strokes.
          */
         class InkBeautifier {
             /**
              * @param {Array<{x:number, y:number, p:number}>} rawPoints
              * @param {number} intensity (0 to 100)
              */
-            static beautify(rawPoints, intensity = 85) {
+            static beautify(rawPoints, intensity = 50) {
                 if (!rawPoints || rawPoints.length < 3 || intensity <= 0) {
                     return rawPoints.map(pt => ({ ...pt }));
                 }
 
                 const factor = intensity / 100;
 
-                // Step 1: Remove redundant micro-clustered points while keeping endpoints
+                // Step 1: Ultra-fine sub-pixel deduplication (0.35px) so tiny Persian loops ('م', 'و') are NEVER lost
                 const filtered = [rawPoints[0]];
-                const minDist = 1.2 + factor * 1.8;
                 for (let i = 1; i < rawPoints.length - 1; i++) {
                     const prev = filtered[filtered.length - 1];
                     const curr = rawPoints[i];
-                    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) >= minDist) {
+                    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) >= 0.35) {
                         filtered.push(curr);
                     }
                 }
@@ -937,46 +936,70 @@
 
                 if (filtered.length < 3) return filtered;
 
-                // Step 2: Gaussian-like Moving Average Pass to eliminate hand tremor
-                const passes = Math.max(1, Math.round(factor * 3));
+                // Step 2: Curvature-Aware Adaptive Smoothing
+                // Detects tight turns/loops and reduces smoothing weight to 0 on sharp curves so loops don't shrink!
+                const passes = intensity > 70 ? 2 : 1;
                 let pts = filtered.map(p => ({ ...p }));
+
                 for (let pass = 0; pass < passes; pass++) {
                     const nextPts = [pts[0]];
                     for (let i = 1; i < pts.length - 1; i++) {
                         const prev = pts[i - 1];
                         const curr = pts[i];
                         const next = pts[i + 1];
-                        const w = 0.25 * factor;
+
+                        const vx1 = curr.x - prev.x;
+                        const vy1 = curr.y - prev.y;
+                        const vx2 = next.x - curr.x;
+                        const vy2 = next.y - curr.y;
+
+                        const len1 = Math.hypot(vx1, vy1);
+                        const len2 = Math.hypot(vx2, vy2);
+
+                        let localWeight = 0.22 * factor;
+
+                        if (len1 > 0.05 && len2 > 0.05) {
+                            // Cosine of turning angle between segments (-1 = 180deg sharp turn, +1 = straight line)
+                            const cosTheta = (vx1 * vx2 + vy1 * vy2) / (len1 * len2);
+                            // If turning sharply (like inside the loop of 'م' or teeth of 'س'), lock the point in place
+                            if (cosTheta < 0.88) {
+                                const straightness = Math.max(0, (cosTheta - 0.25) / 0.63);
+                                localWeight *= (straightness * straightness);
+                            }
+                            // Also protect very short slow strokes (micro-details) from shrinking
+                            if (len1 + len2 < 5.5) {
+                                localWeight *= 0.25;
+                            }
+                        }
+
                         nextPts.push({
-                            x: curr.x * (1 - 2 * w) + (prev.x + next.x) * w,
-                            y: curr.y * (1 - 2 * w) + (prev.y + next.y) * w,
-                            p: (prev.p + curr.p + next.p) / 3
+                            x: curr.x * (1 - 2 * localWeight) + (prev.x + next.x) * localWeight,
+                            y: curr.y * (1 - 2 * localWeight) + (prev.y + next.y) * localWeight,
+                            p: curr.p
                         });
                     }
                     nextPts.push(pts[pts.length - 1]);
                     pts = nextPts;
                 }
 
-                // Step 3: Two-Stage Chaikin Corner-Cutting Algorithm for graceful organic curves
-                const chaikinIterations = intensity >= 60 ? 2 : 1;
-                for (let iter = 0; iter < chaikinIterations; iter++) {
-                    const smooth = [pts[0]];
+                // Step 3: Gentle Midpoint Subdivision ONLY on long straight segments (> 8px) to make curves silky
+                // without cutting corners of small Persian letters
+                if (intensity >= 35) {
+                    const refined = [pts[0]];
                     for (let i = 0; i < pts.length - 1; i++) {
                         const p0 = pts[i];
                         const p1 = pts[i + 1];
-                        smooth.push({
-                            x: 0.75 * p0.x + 0.25 * p1.x,
-                            y: 0.75 * p0.y + 0.25 * p1.y,
-                            p: 0.75 * p0.p + 0.25 * p1.p
-                        });
-                        smooth.push({
-                            x: 0.25 * p0.x + 0.75 * p1.x,
-                            y: 0.25 * p0.y + 0.75 * p1.y,
-                            p: 0.25 * p0.p + 0.75 * p1.p
-                        });
+                        const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+                        if (dist > 8) {
+                            refined.push({
+                                x: (p0.x + p1.x) * 0.5,
+                                y: (p0.y + p1.y) * 0.5,
+                                p: (p0.p + p1.p) * 0.5
+                            });
+                        }
+                        refined.push(p1);
                     }
-                    smooth.push(pts[pts.length - 1]);
-                    pts = smooth;
+                    pts = refined;
                 }
 
                 return pts;
@@ -1132,7 +1155,7 @@
             activeColor: '#0F172A',
             penSize: 3,
             highlighterSize: 18,
-            streamlineIntensity: 85,
+            streamlineIntensity: 50,
             straightLineMode: false,   // Ruler mode for Pen & Highlighter
             activeShape: 'rect',       // 'rect' | 'square' | 'circle' | 'triangle' | 'line' | 'arrow'
             eraserMode: 'stroke',      // 'stroke' | 'partial'
@@ -1193,29 +1216,37 @@
         // Prevent context menu popup when pressing stylus barrel button on Windows 10
         canvasInteraction.addEventListener('contextmenu', e => e.preventDefault());
 
-        let dpr = window.devicePixelRatio || 1;
+        let dpr = 1;
+        let cachedCanvasRect = { left: 0, top: 0, width: 1000, height: 800 };
 
         function uid() {
             return 'el_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
         }
 
         /**
-         * High-DPI Canvas Resizing (Capped at 1.5x on older tablets to guarantee 60fps zero-lag inking)
+         * Ultra-Fast 1:1 Hardware Canvas Sizing (Guarantees instant 60fps response on Windows 10 Fujitsu tablets)
          */
         function resizeCanvases() {
-            dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+            dpr = 1; // 1:1 native pixel mapping eliminates 2.25x GPU pixel fill bottleneck on tablets
             const rect = viewport.getBoundingClientRect();
+            cachedCanvasRect = rect;
             [canvasPdf, canvasHighlighter, canvasInk, canvasInteraction].forEach(c => {
-                c.width = rect.width * dpr;
-                c.height = rect.height * dpr;
+                c.width = rect.width;
+                c.height = rect.height;
                 const ctx = c.getContext('2d');
-                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
             });
+            // Pre-configure interaction context properties once
+            ctxInteraction.lineCap = 'round';
+            ctxInteraction.lineJoin = 'round';
             renderPdfBackground();
             renderAllLayers();
         }
 
         window.addEventListener('resize', resizeCanvases);
+        window.addEventListener('scroll', () => {
+            cachedCanvasRect = canvasInteraction.getBoundingClientRect();
+        }, { passive: true });
 
         /**
          * PDF Annotator Engine (Render PDF Page onto Layer 0 Canvas)
@@ -1643,21 +1674,13 @@
         /**
          * Incremental Direct-to-Screen Segment Drawing (Eliminates full-canvas clear & redraw lag during fast writing)
          */
-        function drawIncrementalSegments(fromIdx) {
+        function drawIncrementalSegments(fromIdx, predictedPt = null) {
             const pts = AppState.currentRawPoints;
             if (pts.length === 0) return;
-
-            ctxInteraction.save();
-            ctxInteraction.lineCap = 'round';
-            ctxInteraction.lineJoin = 'round';
-            ctxInteraction.strokeStyle = AppState.activeColor;
-            ctxInteraction.lineWidth = AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize;
-            canvasInteraction.style.opacity = AppState.activeTool === 'highlighter' ? '0.38' : '1';
 
             ctxInteraction.beginPath();
             if (pts.length === 1) {
                 ctxInteraction.arc(pts[0].x, pts[0].y, ctxInteraction.lineWidth / 2, 0, Math.PI * 2);
-                ctxInteraction.fillStyle = AppState.activeColor;
                 ctxInteraction.fill();
             } else {
                 const start = Math.max(0, fromIdx - 1);
@@ -1665,9 +1688,11 @@
                 for (let i = start + 1; i < pts.length; i++) {
                     ctxInteraction.lineTo(pts[i].x, pts[i].y);
                 }
+                if (predictedPt) {
+                    ctxInteraction.lineTo(predictedPt.x, predictedPt.y);
+                }
                 ctxInteraction.stroke();
             }
-            ctxInteraction.restore();
         }
 
         function renderInteractionOverlay() {
@@ -1775,10 +1800,9 @@
          * ============================================================================
          */
         function getCanvasPoint(e) {
-            const rect = canvasInteraction.getBoundingClientRect();
             return {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top,
+                x: e.clientX - cachedCanvasRect.left,
+                y: e.clientY - cachedCanvasRect.top,
                 p: e.pressure || 0.5
             };
         }
@@ -1811,6 +1835,7 @@
             document.getElementById('popover-shapes').classList.add('hidden');
 
             e.preventDefault();
+            cachedCanvasRect = canvasInteraction.getBoundingClientRect();
             try {
                 if (canvasInteraction.setPointerCapture) {
                     canvasInteraction.setPointerCapture(e.pointerId);
@@ -1910,11 +1935,19 @@
                 AppState.currentRawPoints = [pt];
                 AppState.lastRenderedIndex = 0;
 
+                const strokeWidth = AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize;
+                ctxInteraction.strokeStyle = AppState.activeColor;
+                ctxInteraction.fillStyle = AppState.activeColor;
+                ctxInteraction.lineWidth = strokeWidth;
+                ctxInteraction.lineCap = 'round';
+                ctxInteraction.lineJoin = 'round';
+                canvasInteraction.style.opacity = AppState.activeTool === 'highlighter' ? '0.38' : '1';
+
                 if (AppState.activeTool === 'shape' || AppState.straightLineMode) {
                     renderInteractionOverlay();
                 } else {
                     // Clear interaction layer once at stroke start, then draw incrementally with zero lag
-                    ctxInteraction.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
+                    ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
                     drawIncrementalSegments(0);
                     AppState.lastRenderedIndex = 1;
                 }
@@ -1930,7 +1963,7 @@
             if (!AppState.tempEraserActive && isStylusEraserButtonActive(e)) {
                 AppState.tempEraserActive = true;
                 AppState.currentRawPoints = [];
-                ctxInteraction.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
+                ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
                 pushUndoState();
             }
 
@@ -1938,17 +1971,17 @@
 
             // Handle active Eraser (either via Eraser tool OR holding Stylus Barrel Button)
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
-                for (const ev of events) {
-                    eraseAtPoint(getCanvasPoint(ev));
-                }
-                drawEraserCursorPreview(getCanvasPoint(e));
+                const lastEv = events[events.length - 1] || e;
+                const pt = getCanvasPoint(lastEv);
+                eraseAtPoint(pt);
+                drawEraserCursorPreview(pt);
                 return;
             }
 
             if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') {
                 const prevIdx = AppState.currentRawPoints.length;
-                for (const ev of events) {
-                    AppState.currentRawPoints.push(getCanvasPoint(ev));
+                for (let i = 0; i < events.length; i++) {
+                    AppState.currentRawPoints.push(getCanvasPoint(events[i]));
                 }
 
                 // For freehand Pen & Highlighter, draw ONLY the newly added segment (Zero-Lag Incremental Draw)
