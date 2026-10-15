@@ -277,6 +277,15 @@
             vertical-align: super;
             line-height: 0;
         }
+        /* Isolated LTR Chemical & Structural Formula Token inside RTL Persian Text */
+        .chem-token {
+            display: inline-block;
+            direction: ltr;
+            unicode-bidi: isolate;
+            font-family: 'Vazirmatn', sans-serif;
+            margin: 0 2px;
+            white-space: nowrap;
+        }
         .katex {
             direction: ltr;
             display: inline-block;
@@ -1001,71 +1010,122 @@
         }
 
         /**
+         * Fixes RTL/LTR reversal issues when Vision AI scans a Persian RTL equation from Left-to-Right:
+         * 1. Converts `\frac{...}{...} = <Persian Subject>` -> `<Persian Subject> = \frac{...}{...}`
+         * 2. Converts reversed subtractions like `C3H8O3 - استر` or `3H2O - استر` -> `استر - ...`
+         */
+        function fixReversedPersianMath(rawStr) {
+            if (!rawStr) return '';
+            let s = String(rawStr);
+
+            // Process line by line to preserve multi-line headers
+            return s.split('\n').map(line => {
+                let l = line.trim();
+
+                // 1. If a line starts with \frac{...}{...} and ends with `= <Persian Words>`, flip the equality sides
+                const eqFracMatch = l.match(/^(\\frac\{[\s\S]+\}\{[^{}]+\})\s*=\s*([\u0600-\u06FF][\u0600-\u06FF\s‌0-9\u06F0-\u06F9]*)$/);
+                if (eqFracMatch) {
+                    l = `${eqFracMatch[2].trim()} = ${eqFracMatch[1].trim()}`;
+                }
+
+                // 2. Inside \frac{A - B}{C}, if A is a small formula/number (like C3H8O3, 3H2O, C3H2) and B is a Persian macromolecule (استر, چربی, پلیمر, پروتئین, پپتید), flip A and B
+                l = l.replace(/\\frac\{\s*([0-9\u06F0-\u06F9A-Za-z_{}\(\)\s]+?)\s*-\s*([\u0600-\u06FF][\u0600-\u06FF\s‌0-9\u06F0-\u06F9]*?)\s*\}/g, (m, leftPart, rightPersian) => {
+                    if (/[A-Za-z]/.test(leftPart)) {
+                        return `\\frac{${rightPersian.trim()} - ${leftPart.trim()}}`;
+                    }
+                    return m;
+                });
+
+                return l;
+            }).join('\n');
+        }
+
+        /**
+         * Formats an isolated chemical or structural formula (e.g. C_8H_18, C_{3H8O3}, CH_3-C(=O)-CH_3, 3H_2O)
+         * so that each element's subscript ONLY attaches to its own digits, wrapped in a strict dir="ltr" span.
+         */
+        function formatSingleChemicalToken(chemStr) {
+            let c = chemStr;
+            // 1. Unwrap malformed multi-element braces like C_{8H18} or C_{3H8O3}
+            c = c.replace(/_\{([0-9\u06F0-\u06F9]+[A-Za-z][A-Za-z0-9\u06F0-\u06F9_]*)\}/g, '$1');
+            // 2. Convert element or closing paren followed by _{digits}, _digits, or digits into proper subscript
+            c = c.replace(/([A-Z][a-z]?|\))(?:_\{([0-9\u06F0-\u06F9nxyz]+)\}|_([0-9\u06F0-\u06F9nxyz]+)|([0-9\u06F0-\u06F9]+))/g, (_, el, d1, d2, d3) => {
+                const subVal = d1 || d2 || d3;
+                return `${el}<sub class="chem-sub">${subVal}</sub>`;
+            });
+            // 3. Convert any remaining explicit _{...} or ^{...}
+            c = c.replace(/_\{([^{}]+)\}/g, '<sub class="chem-sub">$1</sub>');
+            c = c.replace(/\^\{([^{}]+)\}/g, '<sup class="math-sup">$1</sup>');
+            return `<span class="chem-token" dir="ltr">${c}</span>`;
+        }
+
+        /**
          * Converts LaTeX / Inline Math & Chemical Formulas into Word-like Stacked Fractions,
-         * Subscripts (H₂O, C₅₇H₁₁₀O₆), Superscripts (x²), and Reaction Arrows (→).
-         * Uses KaTeX when available and falls back to native HTML stacked fractions offline!
+         * Subscripts (H₂O, C₅₇H₁₀₄O₆, C₈H₁₈), Superscripts (x²), and Reaction Arrows.
          */
         function renderFormattedMathAndChem(rawText) {
             if (!rawText) return '';
-            let text = String(rawText);
+            let text = fixReversedPersianMath(String(rawText));
 
-            // 1. Render explicit $...$ or $$...$$ blocks with KaTeX if available, or native parser
-            text = text.replace(/\$\$([\s\S]+?)\$\$|\$([^\$]+?)\$/g, (match, blockMath, inlineMath) => {
-                const expr = (blockMath || inlineMath || '').trim();
-                if (window.katex && !/[\u0600-\u06FF]/.test(expr)) {
-                    try {
-                        return window.katex.renderToString(expr, {
-                            throwOnError: false,
-                            displayMode: Boolean(blockMath)
-                        });
-                    } catch (_) {}
-                }
-                return parseNativeMathExpression(expr);
-            });
+            // Strip $...$ or $$...$$ delimiters so our unified Persian+Chemistry parser handles mixed RTL/LTR seamlessly
+            text = text.replace(/\$\$([\s\S]+?)\$\$|\$([^\$]+?)\$/g, (_, b, i) => b || i || '');
 
-            // 2. Also parse any remaining \frac{a}{b}, chemical formulas (e.g. H2O, C3H5(OH)3), subscripts/superscripts in mixed Persian/Math text
             return parseNativeMathExpression(text);
         }
 
         function parseNativeMathExpression(str) {
             let s = escapeHtmlSafe(str);
 
-            // Handle nested or multiple \frac{num}{den} -> real stacked fraction bar
-            let fracRegex = /\\frac\{([^{}]+)\}\{([^{}]+)\}/g;
+            // 1. Unwrap \text{...}, \mathrm{...}, \mathbf{...} FIRST so inner braces don't block \frac
+            let textSafety = 0;
+            while (/\\(?:text|mathrm|mathbf)\{([^{}]*)\}/.test(s) && textSafety < 6) {
+                s = s.replace(/\\(?:text|mathrm|mathbf)\{([^{}]*)\}/g, '$1');
+                textSafety++;
+            }
+
+            // 2. Unwrap malformed multi-element subscript braces like C_{8H18} or C_{3H8O3}
+            s = s.replace(/_\{([0-9\u06F0-\u06F9]+[A-Z][a-zA-Z0-9\u06F0-\u06F9_]*)\}/g, '$1');
+
+            // 3. Detect & isolate contiguous chemical / structural formulas (e.g., CH_3-C(=O)-CH_3, C_8H_18, 3H_2O, C_{57}H_{104}O_6)
+            // Must contain at least one chemical element with a subscript/number or structural bond
+            const chemPattern = /(?:[0-9\u06F0-\u06F9]+\s*)?(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?(?:(?:[-=]+|\([=A-Za-z0-9\u06F0-\u06F9_]+\))(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?|[A-Z][a-z]?(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?)+/g;
+            s = s.replace(chemPattern, (match) => {
+                // Only treat as chemical token if it has a number, subscript, or structural bond/parenthesis
+                if (/[0-9\u06F0-\u06F9_=\(\)-]/.test(match)) {
+                    return formatSingleChemicalToken(match);
+                }
+                return match;
+            });
+
+            // 4. Handle any remaining explicit _{...} and _{x} (only digits or single lowercase letter, NEVER uppercase [A-Z])
+            s = s.replace(/_\{([^{}]+)\}/g, '<sub class="chem-sub">$1</sub>');
+            s = s.replace(/_([0-9\u06F0-\u06F9]+|[a-z])/g, '<sub class="chem-sub">$1</sub>');
+
+            // 5. Handle explicit ^{...} and ^x superscripts
+            s = s.replace(/\^\{([^{}]+)\}/g, '<sup class="math-sup">$1</sup>');
+            s = s.replace(/\^([0-9\u06F0-\u06F9\+\-]+|[a-z])/g, '<sup class="math-sup">$1</sup>');
+
+            // 6. Now that all inner curly braces are resolved, parse nested or multiple \frac{num}{den} into stacked fractions
+            const fracRegex = /\\frac\{([^{}]+)\}\{([^{}]+)\}/g;
             let safety = 0;
             while (fracRegex.test(s) && safety < 6) {
                 s = s.replace(fracRegex, (_, num, den) => {
-                    return `<span class="math-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`;
+                    return `<span class="math-frac" dir="rtl"><span class="num" dir="rtl">${num}</span><span class="den" dir="rtl">${den}</span></span>`;
                 });
                 safety++;
             }
 
-            // Clean up \text{...} or \mathrm{...}
-            s = s.replace(/\\(?:text|mathrm|mathbf)\{([^{}]+)\}/g, '$1');
-
-            // Handle explicit _{...} and _{x} subscripts
-            s = s.replace(/_\{([^{}]+)\}/g, '<sub class="chem-sub">$1</sub>');
-            s = s.replace(/_([a-zA-Z0-9\u06F0-\u06F9]+)/g, '<sub class="chem-sub">$1</sub>');
-
-            // Handle explicit ^{...} and ^{x} superscripts
-            s = s.replace(/\^\{([^{}]+)\}/g, '<sup class="math-sup">$1</sup>');
-            s = s.replace(/\^([a-zA-Z0-9\u06F0-\u06F9\+\-]+)/g, '<sup class="math-sup">$1</sup>');
-
-            // Automatically format common chemical formulas like H2O, CO2, C57H110O6, CH2, O2, H2SO4
-            s = s.replace(/\b([A-Z][a-z]?)(\d+)\b/g, '$1<sub class="chem-sub">$2</sub>');
-            s = s.replace(/([A-Z][a-z]?)(\d+)(?=[A-Z\(\)])/g, '$1<sub class="chem-sub">$2</sub>');
-            s = s.replace(/\(([^()]+)\)(\d+)/g, '($1)<sub class="chem-sub">$2</sub>');
-
-            // Replace math symbols & arrows
-            s = s.replace(/\\rightarrow|--&gt;|->/g, ' → ')
-                 .replace(/\\leftarrow|&lt;--/g, ' ← ')
-                 .replace(/\\leftrightarrow|&lt;-&gt;/g, ' ⇌ ')
+            // 7. Replace arrows & math symbols (In Persian RTL lines, reaction arrows point right-to-left ←)
+            const hasPersian = /[\u0600-\u06FF]/.test(s);
+            const arrowChar = hasPersian ? ' ← ' : ' → ';
+            s = s.replace(/\\rightarrow|\\leftarrow|--&gt;|&lt;--|-&gt;|&lt;-|→/g, arrowChar)
+                 .replace(/\\leftrightarrow|\\rightleftharpoons|&lt;-&gt;/g, ' ⇌ ')
                  .replace(/\\times|\*/g, ' × ')
                  .replace(/\\div/g, ' ÷ ')
                  .replace(/\\pm/g, ' ± ')
                  .replace(/\\Delta/g, 'Δ');
 
-            // Convert remaining digits to Persian digits for unified reading
+            // 8. Convert all digits to Persian digits
             return s.replace(/\d/g, d => PERSIAN_DIGITS[parseInt(d, 10)]).replace(/\n/g, '<br>');
         }
 
@@ -1994,6 +2054,29 @@
                 }
             }
 
+            // 3.5 If in Mind-Map mode and handwritten strokes exist below the tree, draw a clean visual separator line
+            if (AppState.workspaceMode === 'mindmap' && AppState.strokes.length > 0 && AppState.mindmapData.nodes.length > 0) {
+                let minStrokeY = Infinity;
+                AppState.strokes.forEach(s => s.points.forEach(p => { if (p.y < minStrokeY) minStrokeY = p.y; }));
+                if (minStrokeY > 120 && minStrokeY < Infinity) {
+                    const sepY = minStrokeY - 18;
+                    ctxInk.save();
+                    ctxInk.strokeStyle = '#CBD5E1';
+                    ctxInk.lineWidth = 1;
+                    ctxInk.setLineDash([6, 6]);
+                    ctxInk.beginPath();
+                    ctxInk.moveTo(40, sepY);
+                    ctxInk.lineTo(w - 40, sepY);
+                    ctxInk.stroke();
+                    ctxInk.setLineDash([]);
+                    ctxInk.fillStyle = '#64748B';
+                    ctxInk.font = 'bold 11px Vazirmatn';
+                    ctxInk.textAlign = 'center';
+                    ctxInk.fillText('─── دست‌خط و یادداشت‌های دستی شما (منتقل‌شده به پایین نمودار) ───', w / 2, sepY - 6);
+                    ctxInk.restore();
+                }
+            }
+
             // 4. Render Vector Productivity Symbols
             for (const sym of AppState.symbols) {
                 VectorSymbols.drawSymbol(ctxInk, sym);
@@ -2171,6 +2254,33 @@
                     scheduleSavePage();
                 });
                 actions.appendChild(btnEdit);
+
+                // Flip Formula Direction Button (⇄) for instant RTL/LTR equation or subtraction swap
+                const btnFlip = document.createElement('button');
+                btnFlip.className = 'px-1 py-0.2 bg-white/80 hover:bg-purple-50 text-purple-700 border border-slate-200 rounded font-bold transition';
+                btnFlip.title = 'برعکس کردن جهت تفریق یا تساوی فرمول (چپ/راست)';
+                btnFlip.textContent = '⇄';
+                btnFlip.addEventListener('pointerdown', e => e.stopPropagation());
+                btnFlip.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    pushUndoState();
+                    let txt = node.text || '';
+                    // Flip A - B inside \frac{A - B}{C} or general A - B
+                    if (/\\frac\{([^{}]+?)-([^{}]+?)\}/.test(txt)) {
+                        txt = txt.replace(/\\frac\{([^{}]+?)\s*-\s*([^{}]+?)\}/g, '\\frac{$2 - $1}');
+                    } else if (txt.includes(' - ')) {
+                        const parts = txt.split(' - ');
+                        if (parts.length === 2) txt = `${parts[1].trim()} - ${parts[0].trim()}`;
+                    } else if (txt.includes('=')) {
+                        const eqParts = txt.split('=');
+                        if (eqParts.length === 2) txt = `${eqParts[1].trim()} = ${eqParts[0].trim()}`;
+                    }
+                    node.text = txt;
+                    renderMindMapDOMNodes();
+                    renderAllLayers();
+                    scheduleSavePage();
+                });
+                actions.appendChild(btnFlip);
 
                 // Add Child Branch Button
                 const btnAddSub = document.createElement('button');
@@ -2464,8 +2574,74 @@
             });
 
             renderMindMapDOMNodes();
+
+            // Measure actual bottom of the laid-out Mind-Map Tree and shift any overlapping user handwriting BELOW the tree!
+            ensureHandwritingBelowMindMap();
+
             renderAllLayers();
             scheduleSavePage();
+        }
+
+        /**
+         * Ensures the Mind-Map Tree stays cleanly at the TOP of the canvas while pushing
+         * any existing handwritten strokes/texts/symbols BELOW the tree so they never overlap!
+         */
+        function ensureHandwritingBelowMindMap() {
+            const nodes = AppState.mindmapData.nodes || [];
+            if (nodes.length === 0) return;
+
+            // 1. Find lowest Y coordinate of all visible Mind-Map cards
+            let treeMaxY = 0;
+            nodes.forEach(n => {
+                if (isMindMapNodeVisible(n, nodes)) {
+                    const bottom = (n.y || 0) + (n.h || 58);
+                    if (bottom > treeMaxY) treeMaxY = bottom;
+                }
+            });
+
+            const targetHandwritingStartY = treeMaxY + 56;
+
+            // 2. Check current handwritten strokes in Mind-Map workspace (or Planner strokes if user is in Mind-Map)
+            const strokes = AppState.mindmapData.strokes || [];
+            const texts = AppState.mindmapData.texts || [];
+            const symbols = AppState.mindmapData.symbols || [];
+
+            if (strokes.length === 0 && texts.length === 0 && symbols.length === 0) return;
+
+            let minInkY = Infinity;
+            let maxInkY = 0;
+
+            strokes.forEach(s => {
+                s.points.forEach(p => {
+                    if (p.y < minInkY) minInkY = p.y;
+                    if (p.y > maxInkY) maxInkY = p.y;
+                });
+            });
+            texts.forEach(t => {
+                if (t.y < minInkY) minInkY = t.y;
+                if (t.y + 40 > maxInkY) maxInkY = t.y + 40;
+            });
+            symbols.forEach(sym => {
+                if (sym.y < minInkY) minInkY = sym.y;
+                if (sym.y + 30 > maxInkY) maxInkY = sym.y + 30;
+            });
+
+            if (minInkY < targetHandwritingStartY && minInkY !== Infinity) {
+                const deltaY = targetHandwritingStartY - minInkY;
+                strokes.forEach(s => {
+                    s.points.forEach(p => { p.y += deltaY; });
+                });
+                texts.forEach(t => { t.y += deltaY; });
+                symbols.forEach(sym => { sym.y += deltaY; });
+                maxInkY += deltaY;
+            }
+
+            // 3. Dynamically expand paper stage height if shifted handwriting exceeds current canvas height
+            const requiredHeight = Math.max(1950, Math.ceil(maxInkY + 220), Math.ceil(treeMaxY + 300));
+            if (paperStage.clientHeight < requiredHeight) {
+                paperStage.style.height = `${requiredHeight}px`;
+                resizeCanvases();
+            }
         }
 
         function switchWorkspaceMode(targetMode) {
@@ -4048,14 +4224,23 @@
             resultContainer.classList.add('hidden');
 
             try {
-                const systemPrompt = `تو یک استاد برجسته شیمی، ریاضی و زیست‌شناسی کنکور ایران و متخصص OCR دست‌خط و فرمول‌های علمی فارسی هستی.
+                const systemPrompt = `تو یک استاد برجسته و طراح سوال کنکور سراسری ایران (مسلط به خط‌به‌خط کتاب‌های درسی شیمی، زیست‌شناسی، فیزیک و ریاضی پایه‌های دهم، یازدهم و دوازدهم نظام جدید ایران) و متخصص OCR دست‌خط فارسی هستی.
 قوانین بسیار سخت‌گیرانه که باید ۱۰۰٪ رعایت کنی:
-۱. عدم حذف حتی یک کلمه یا نماد: تمام کلمات، جملات، صورت و مخرج کسرها (مانند \\frac{استر سه‌عاملی - 3H_2O}{3})، ضرایب استوکیومتری، زیروندها و توان‌ها را کلمه‌به‌کلمه و کامل استخراج کن. هرگز جمله‌ای را نصفه رها نکن و هیچ بخشی از تصویر را جا نینداز.
-۲. فرمت استاندارد فرمول‌ها: تمام کسرها را حتماً به صورت \\frac{صورت}{مخرج}، زیروندهای شیمیایی را به صورت H_2O یا _{...} و توان‌ها را به صورت ^{...} بنویس تا در برنامه با خط کسری واقعی مثل Microsoft Word نمایش داده شوند.
-۳. دسته‌بندی هوشمند و حذف تکرارها: اگر دست‌خط کاربر پراکنده است یا مطلبی چند بار تکرار شده، آن‌ها را با سلیقه آموزشی عالی، بسیار مرتب و منطقی در شاخه‌ها دسته‌بندی و ادغام کن و به هر شاخه بر اساس ماهیتش (فرمول، واکنش، نکته، استثنا) یک کد رنگ متمایز از لیست بده.
-۴. ممنوعیت تغییر سرخود علمی (بسیار مهم): فرمول‌ها و اعداد دست‌خط کاربر را دقیقاً همان‌طور که روی کاغذ نوشته در نمودار درختی ثبت کن و سرخود عوض نکن! اما اگر تشخیص دادی فرمول یا نکته‌ای که کاربر نوشته از نظر علمی یا استوکیومتری اشتباه است (مثلاً علامت منها به جای جمع در هیدرولیز استر یا هر خطای دیگر)، آن را در آرایه scientificReviews به همراه نسخه اصلاح‌شده و توضیح علمی گزارش کن تا خود کاربر تصمیم بگیرد.`;
+۱. وفاداری مطلق به دست‌خط کاربر و عدم حذف هیچ کلمه یا فرمول: تمام کلمات، جملات، صورت و مخرج کسرها، ضرایب و زیروندها را کلمه‌به‌کلمه و کامل استخراج کن. هرگز عبارتی را جا نینداز و هرگز در ساخت درختواره (`trees`) فرمول دست‌خط کاربر را سرخود با فرمول دیگری جایگزین نکن!
+۲. قانون حیاتی جهت راست‌به‌چپ (RTL) در معادلات و تفریق‌های فارسی:
+   - دانش‌آموز ایرانی معادلات کلامی فارسی را از **راست به چپ** می‌نویسد!
+   - یعنی در عبارت‌های کسری یا تفریقی، عبارتی که در **سمت راستِ علامت منفی (`-`)** نوشته شده **مفروق‌منه (جمله اول)** است و عبارتی که در **سمت چپِ علامت منفی** نوشته شده **مفروق (جمله دوم)** است.
+   - هرگز تفریق‌های فارسی را مثل انگلیسی از چپ به راست نخوان! مثلاً اگر در صورت کسر سمت راست نوشته «استر» و سمت چپ نوشته «- 3H2O» یا «- C3H2»، حتماً در خروجی اول `استر` را بنویس و بعد `-`: مثلاً `\frac{استر - 3H_2O}{3}` (هرگز ننویس `3H_2O - استر`!).
+   - همچنین اگر سمت راست تساوی عبارت فارسی (مثل `اسید چرب =`) و سمت چپ آن کسر است، اول `اسید چرب = ` را بنویس و بعد `\frac{...}{...}` را بنویس.
+۳. فرمت استاندارد فرمول‌های شیمی و ریاضی:
+   - کسرها را حتماً با `\frac{صورت}{مخرج}` بنویس.
+   - در فرمول‌های شیمیایی، زیروند هر عنصر را فقط برای عدد همان عنصر بگذار (مثلاً `C_8H_{18}` یا `C_{57}H_{104}O_6` یا `3H_2O` یا `CH_3-C(=O)-CH_3`) و هرگز چند عنصر را یکجا داخل یک زیروند نبر (هرگز ننویس `C_{8H18}` یا `C_{3H8O3}`!).
+۴. بررسی فقط و فقط طبق «کتاب درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی!):
+   - معیار علمی تو در بخش `scientificReviews` باید ۱۰۰٪ منطبق بر **کتاب‌های درسی رسمی دبیرستان ایران و تکنیک‌های محاسباتی کنکور ایران** باشد.
+   - برای نمونه، در کتاب شیمی یازدهم و دوازدهم ایران: بنزین `C_8H_{18}`، گریس `C_{18}H_{38}`، وازلین `C_{25}H_{52}`، چربی کوهان شتر `C_{57}H_{110}O_6` (تری‌استئارین - سیرشده) و روغن زیتون `C_{57}H_{104}O_6` (تری‌اولئین - دارای ۳ پیوند دوگانه) است. همچنین در استوکیومتری کنکور، آبکافت ۱ مول استر سه‌عاملی (تری‌گلیسرید) با ۳ مول آب (`3H_2O`)، ۱ مول گلیسرول (`C_3H_8O_3`) و ۳ مول اسید چرب می‌دهد (یعنی تفاوت فرمول استر سه‌عاملی با مجموع ۳ اسید چرب برابر `C_3H_8O_3 - 3H_2O = C_3H_2` به جرم ۳۸ گرم است).
+   - اگر دانش‌آموز در دست‌خط خود عددی را برخلاف کتاب درسی یا فرمول کنکوری نوشته بود (مثلاً برای روغن زیتون به جای `H_{104}` نوشته بود `H_{102}` یا در رابطه تستی استر و اسید چرب علامت یا مولکول را اشتباه نوشته بود)، در آرایه `scientificReviews` بدون دستکاری سرخودِ درختواره، خیلی دقیق و بر اساس **منطق کنکور و کتاب درسی ایران** به او اطلاع بده تا خودش تصمیم بگیرد.`;
 
-                const userPrompt = "لطفاً تمام نوشته‌ها و فرمول‌های ریاضی/شیمی داخل این تصویر دست‌خط را بدون جا انداختن هیچ کلمه‌ای بخوان، کسرها را با \\frac{صورت}{مخرج} بنویس، با چیدمان منطقی و رنگ‌بندی موضوعی به درختواره تبدیل کن و اگر خطای علمی در نوشته‌ام بود بدون تغییر سرخود در بخش scientificReviews به من اطلاع بده.";
+                const userPrompt = "لطفاً تمام نوشته‌ها و فرمول‌های ریاضی/شیمی داخل این تصویر دست‌خط را با رعایت جهت راست‌به‌چپ (RTL) معادلات فارسی بخوان (جای طرفین منها و مساوی را برعکس نکن)، زیروند هر عنصر شیمیایی را جداگانه بنویس، به درختواره رنگی تبدیل کن و هرگونه بررسی را صرفاً بر اساس کتاب‌های درسی دبیرستان و کنکور سراسری ایران در بخش scientificReviews گزارش کن.";
 
                 const payload = {
                     contents: [{
@@ -4099,8 +4284,13 @@
                 }
 
                 if (targetAction === 'tree' && parsed.trees && parsed.trees.length > 0) {
+                    // If user wrote in Planner tab and didn't check "clear ink", also copy their handwriting into Mind-Map below the tree so they can see both!
+                    if (!shouldClearInk && snap.sourceType === 'planner' && AppState.mindmapData.strokes.length === 0) {
+                        AppState.mindmapData.strokes = JSON.parse(JSON.stringify(AppState.plannerData.strokes));
+                    }
                     populateMindMapFromGeminiTrees(parsed.trees, parsed.scientificReviews || []);
                     loadingBox.classList.add('hidden');
+                    document.getElementById('modal-ai-gemini').classList.add('hidden');
                 } else if (targetAction === 'text' && cleanText) {
                     pushUndoState();
                     AppState.texts.push({
