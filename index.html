@@ -1115,7 +1115,7 @@
             }
 
             // Chemical formula matching regex
-            const chemPattern = /(?:[0-9\u06F0-\u06F9]+\s*)?(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?(?:(?:[-=]+|\([=A-Za-z0-9\u06F0-\u06F9_]+\))(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?|[A-Z][a-z]?(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?)+/g;
+            const chemPattern = /(?:[0-9\u06F0-\u06F9]+\s*)?(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?(?:(?:[-=]+|\([=A-Za-z0-9\u06F0-\u06F9_]+\))(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?|[A-Z][a-z]?(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?|\([A-Za-z0-9\u06F0-\u06F9_=]+\)(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?)+/g;
 
             s = s.replace(chemPattern, (match) => {
                 if (/[0-9\u06F0-\u06F9_=\(\)-]/.test(match)) {
@@ -4308,6 +4308,7 @@
                         type: "OBJECT",
                         properties: {
                             label: { type: "STRING", description: "برچسب کوتاه و دقیق ساختار، مثلاً «ساختار لوییس بنزن» یا «حلقهٔ سیکلوهکسان»" },
+                            searchTitle: { type: "STRING", description: "نام دقیق همان ماده یا ساختار برای جستجوی تصویر مرجع، فقط نام خالص بدون کلمهٔ اضافه. مثلاً «استون» یا «بنزن» یا «اتانول». اگر مادهٔ مشخصی نیست، این فیلد را خالی بگذار." },
                             box: {
                                 type: "OBJECT",
                                 description: "کادر ناحیهٔ ساختار روی تصویر دستخط. مختصات صحیح بین ۰ تا ۱۰۰۰ و نسبت به کل تصویر ارسالی.",
@@ -4562,7 +4563,7 @@
 
             if (rightFrac - leftFrac < 0.02 || bottomFrac - topFrac < 0.02) return null;
 
-            const pad = 0.015;   // breathing room so no stroke gets clipped
+            const pad = 0.05;   // generous breathing room so no stroke gets clipped at any edge
             const sx = Math.max(0, Math.floor((leftFrac - pad) * snap.cropW));
             const sy = Math.max(0, Math.floor((topFrac - pad) * snap.cropH));
             const sw = Math.min(snap.cropW - sx, Math.ceil((rightFrac - leftFrac + pad * 2) * snap.cropW));
@@ -4616,6 +4617,39 @@
         }
 
         /**
+         * Looks up a high-quality reference picture for a named substance/structure.
+         * Uses the public Wikipedia REST API (free, no API key, CORS enabled).
+         * Tries Persian first (the UI is Persian), then English.
+         * Resolves to { url, sourceUrl } or null. Never throws.
+         */
+        async function fetchReferenceImage(title) {
+            const clean = String(title || '').trim();
+            if (!clean) return null;
+
+            for (const lang of ['fa', 'en']) {
+                try {
+                    const res = await fetch(
+                        `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(clean)}`
+                    );
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    const img = data.originalimage || data.thumbnail;
+                    if (img && img.source) {
+                        const desktop = data.content_urls && data.content_urls.desktop;
+                        return {
+                            url: img.source,
+                            sourceUrl: (desktop && desktop.page) ||
+                                `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(clean)}`
+                        };
+                    }
+                } catch (_) {
+                    // offline / blocked / missing page → just try the next language
+                }
+            }
+            return null;
+        }
+
+        /**
          * Attaches one picture per detected 2D structure, parked below the tree.
          * Never deletes or modifies the user's original handwriting.
          */
@@ -4626,7 +4660,14 @@
             const cropped = [];
             for (const st of list) {
                 const dataUrl = await cropSnapshotToStructureBox(snap, st.box);
-                if (dataUrl) cropped.push({ label: String(st.label).trim(), dataUrl });
+                const ref = st.searchTitle ? await fetchReferenceImage(st.searchTitle) : null;
+                if (!dataUrl && !ref) continue;
+                cropped.push({
+                    label: String(st.label).trim(),
+                    dataUrl: dataUrl || '',
+                    webImageUrl: ref ? ref.url : null,
+                    webSourceUrl: ref ? ref.sourceUrl : null
+                });
             }
 
             // Safety net: the AI said a 2D structure exists but gave no usable box.
@@ -4634,7 +4675,12 @@
             if (cropped.length === 0) {
                 const fullSnap = await cropSnapshotToStructureBox(snap, { xmin: 0, ymin: 0, xmax: 1000, ymax: 1000 });
                 if (!fullSnap) return 0;
-                cropped.push({ label: String(list[0].label).trim() || 'تصویر دست‌خط', dataUrl: fullSnap });
+                cropped.push({
+                    label: String(list[0].label).trim() || 'تصویر دست‌خط',
+                    dataUrl: fullSnap,
+                    webImageUrl: null,
+                    webSourceUrl: null
+                });
             }
 
             if (recordUndo) pushUndoState();
@@ -4653,6 +4699,8 @@
                     w: cardW,
                     h: cardH,
                     dataUrl: c.dataUrl,
+                    webImageUrl: c.webImageUrl || null,
+                    webSourceUrl: c.webSourceUrl || null,
                     label: c.label
                 });
                 y += cardH + 24;
@@ -4686,17 +4734,23 @@
                 card.style.height = `${imageObj.h}px`;
                 card.style.pointerEvents = AppState.mindmapFreeInkLock ? 'none' : 'auto';
 
-                // Header = drag handle + label + delete
+                // Which picture is on display: the curated Wikipedia reference (better
+                // quality) when we found one, otherwise the handwriting crop.
+                let showingReference = !!imageObj.webImageUrl;
+
+                // Header = drag handle + label + source toggle + delete
                 const header = document.createElement('div');
                 header.className = 'flex items-center justify-between gap-1 px-2 py-1 bg-purple-50 border-b border-purple-100 text-[9px] cursor-grab shrink-0';
 
                 const labelEl = document.createElement('span');
                 labelEl.className = 'font-bold text-purple-800 truncate';
-                labelEl.textContent = `🖼 ${imageObj.label || 'ساختار دست‌نویس'}`;
                 header.appendChild(labelEl);
 
+                const actionsEl = document.createElement('div');
+                actionsEl.className = 'flex items-center gap-1 shrink-0';
+
                 const btnDelete = document.createElement('button');
-                btnDelete.className = 'text-slate-400 hover:text-red-600 font-bold shrink-0';
+                btnDelete.className = 'text-slate-400 hover:text-red-600 font-bold shrink-0 touch-manipulation';
                 btnDelete.textContent = '✕';
                 btnDelete.title = 'حذف این تصویر (دست‌خط اصلی دست‌نخورده می‌ماند)';
                 btnDelete.addEventListener('pointerdown', e => e.stopPropagation());
@@ -4707,17 +4761,52 @@
                     renderMindMapImages();
                     scheduleSavePage();
                 });
-                header.appendChild(btnDelete);
-                card.appendChild(header);
+                actionsEl.appendChild(btnDelete);
 
                 const body = document.createElement('div');
                 body.className = 'flex-1 min-h-0 flex items-center justify-center bg-white p-1';
                 const imgEl = document.createElement('img');
-                imgEl.src = imageObj.dataUrl;
                 imgEl.draggable = false;
                 imgEl.alt = imageObj.label || 'ساختار دست‌نویس';
                 imgEl.className = 'max-w-full max-h-full object-contain select-none';
                 body.appendChild(imgEl);
+
+                const refreshCard = () => {
+                    labelEl.textContent = `${showingReference ? '🖼' : '✍'} ${imageObj.label || 'ساختار دست‌نویس'}`;
+                    imgEl.src = showingReference ? imageObj.webImageUrl : imageObj.dataUrl;
+                };
+
+                if (imageObj.webImageUrl) {
+                    const btnToggle = document.createElement('button');
+                    btnToggle.className = 'text-slate-400 hover:text-purple-700 font-bold shrink-0 touch-manipulation';
+                    btnToggle.textContent = '✍';
+                    btnToggle.title = 'جابه‌جایی بین تصویر مرجع (ویکی‌پدیا) و دست‌خط خودت';
+                    btnToggle.addEventListener('pointerdown', e => e.stopPropagation());
+                    btnToggle.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        showingReference = !showingReference;
+                        refreshCard();
+                        btnToggle.textContent = showingReference ? '✍' : '🖼';
+                    });
+                    actionsEl.insertBefore(btnToggle, btnDelete);
+
+                    if (imageObj.webSourceUrl) {
+                        const srcLink = document.createElement('a');
+                        srcLink.href = imageObj.webSourceUrl;
+                        srcLink.target = '_blank';
+                        srcLink.rel = 'noopener noreferrer';
+                        srcLink.className = 'text-[8px] text-slate-400 hover:text-purple-700 shrink-0 touch-manipulation';
+                        srcLink.textContent = 'منبع';
+                        srcLink.title = 'منبع تصویر مرجع';
+                        srcLink.addEventListener('pointerdown', e => e.stopPropagation());
+                        srcLink.addEventListener('click', e => e.stopPropagation());
+                        actionsEl.insertBefore(srcLink, btnDelete);
+                    }
+                }
+
+                refreshCard();
+                header.appendChild(actionsEl);
+                card.appendChild(header);
                 card.appendChild(body);
 
                 // Resize handle (bottom-right corner)
@@ -4830,6 +4919,7 @@
                     "۴. ساختارهای دوبعدی (لوییس، حلقه، پیوند، شکل هندسی): اگر در دست‌خط ساختار لوییس، حلقهٔ بنزنی، پیوند داتیو یا هر شکل دوبعدی کشیده شده، هرگز آن را به یک خط متن تبدیل نکن (این کار ساختار را کاملاً خراب می‌کند). در آن صورت:",
                     "   - فیلد placement را خالی بگذار، در title فقط یک برچسب کوتاه و دقیق مثل «ساختار لوییس بنزن» بنویس، و در scientificReviews یک مورد با explanation توضیح بده که این بخش برای حفظ دقت به‌صورت تصویر نگه داشته شده است.",
                     "   - الزامی: برای هر ساختار دوبعدی یک عضو در آرایهٔ «structures» اضافه کن که دو فیلد دارد: label (برچسب کوتاه همان ساختار) و box (کادر دقیق آن ساختار روی تصویر). اگر ساختار را در structures نگذاری، آن شکل برای کاربر کاملاً از بین می‌رود.",
+                    "   - در همان عضو structures فیلد searchTitle را هم پر کن: نام خالص و دقیق همان ماده یا ساختار (مثلاً «استون»، «بنزن»، «اتانول») تا برنامه بتواند یک تصویر مرجع باکیفیت از ویکی‌پدیا برایش پیدا کند. اگر مادهٔ مشخصی نیست، این فیلد را خالی بگذار.",
                     "   - box باید چهار عدد صحیح بین ۰ تا ۱۰۰۰ داشته باشد و نسبت به کل تصویر ارسالی باشد: xmin = فاصلهٔ لبهٔ راستِ ناحیه از لبهٔ راست تصویر، ymin = فاصلهٔ لبهٔ بالای ناحیه از بالای تصویر، xmax = فاصلهٔ لبهٔ چپ‌ترِ ناحیه از لبهٔ راست تصویر (باید از xmin بزرگ‌تر باشد)، ymax = فاصلهٔ لبهٔ پایین ناحیه از بالای تصویر (باید از ymin بزرگ‌تر باشد). توجه: محور افقی از سمت راست شمرده می‌شود چون دست‌خط فارسی است.",
                     "   - مثال: اگر ساختار لوییس در گوشهٔ بالا-راست تصویر باشد، box = { xmin: 30, ymin: 40, xmax: 420, ymax: 380 }. اگر هیچ ساختار دوبعدی در تصویر نیست، structures را آرایهٔ خالی [] بگذار.",
                     "۵. بررسی علمی فقط و فقط طبق «کتاب‌های درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی):",
@@ -5160,9 +5250,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 2,
+            version: 3,
             date: '2026-10-16',
-            features: 'placement-order + structure-images + debug'
+            features: 'formula-bidi-fix + wider-crop + wikipedia-image'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
