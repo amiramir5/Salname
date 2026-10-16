@@ -2904,10 +2904,9 @@
                 subMindmap.classList.remove('hidden');
                 subMindmap.classList.add('flex');
 
-                // If Mind-Map is completely empty on first visit, create a starter root node automatically
-                if (AppState.mindmapData.nodes.length === 0) {
-                    addMindMapRootNode();
-                }
+                // The canvas starts empty on purpose — the user adds branches with
+                // «+ مبحث اصلی جدید» whenever they want. Auto-seeding a starter tree
+                // here meant a deleted tree kept reappearing on every re-entry.
             } else {
                 AppState.strokes = AppState.plannerData.strokes;
                 AppState.texts = AppState.plannerData.texts;
@@ -5250,9 +5249,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 3,
+            version: 4,
             date: '2026-10-16',
-            features: 'formula-bidi-fix + wider-crop + wikipedia-image'
+            features: 'formula-bidi-fix + wider-crop + wikipedia-image + empty-mindmap'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
