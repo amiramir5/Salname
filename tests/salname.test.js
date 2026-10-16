@@ -318,6 +318,22 @@ const hwStroke = (id, x, y, len = 30) => ({
 // A single dot of a letter (پ, ت, ق ...): its own stroke, but never its own card.
 const hwDot = (id, x, y) => ({ id, size: 4, points: [{ x, y }, { x: x + 1, y: y + 1 }] });
 
+// A written word: one long stroke with a tall letter in it, the way real handwriting looks.
+const hwWord = (id, x, y, len = 120) => ({
+    id, size: 4,
+    points: [{ x, y }, { x: x + len * 0.5, y: y - 20 }, { x: x + len, y: y + 4 }]
+});
+
+// A dot drawn as a little circle, which is how this user writes them.
+const hwDotR = (id, cx, cy, r = 6) => {
+    const points = [];
+    for (let i = 0; i <= 9; i++) {
+        const a = (i / 9) * Math.PI * 2;
+        points.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+    }
+    return { id, size: 4, points };
+};
+
 check('no strokes means no blocks', groupStrokesIntoBlocks([]), []);
 
 check('two far-apart lines become two blocks',
@@ -359,6 +375,16 @@ check('a dot-heavy page still makes one card per written line', dotHeavyBlocks.l
 check('...with every dot inside its own line\'s card',
     dotHeavyBlocks.every(b => b.strokes.length === 4), true);
 
+// The dots can be almost as tall as the letters — this user draws them as little circles — so a
+// pure size threshold is not enough. A written word is a LONG stroke, and that is the signal.
+const bigDots = groupStrokesIntoBlocks([
+    hwWord('word', 900, 200, 260),
+    hwDotR('d1', 950, 168, 6),
+    hwDotR('d2', 972, 168, 6)
+]);
+check('dots almost as tall as the letters still join their line', bigDots.length, 1);
+check('...with every dot in that one card', bigDots[0].strokes.length, 3);
+
 // A stroke that cannot draw anything (an outline removed with «بی‌رنگ», a white fill on
 // white) used to become a card with nothing in it — the "empty box".
 const ghost = { id: 'ghost', size: 4, color: 'transparent', points: [{ x: 100, y: 100 }, { x: 200, y: 100 }] };
@@ -394,6 +420,14 @@ ok('cards get a paper-like gradient background', html.includes('function getCard
 ok('tiny ink cannot be blown up into a poster', html.includes('const MAX_INK_SCALE = 3'));
 ok('no card can ever render empty',
     html.includes('function canvasHasInk') && html.includes('canvasHasInk(buildMindMapInkCanvas'));
+ok('the PNG export draws the handwriting, not an empty box',
+    html.includes('function drawNodeInkInto') && html.includes('inkBoxHeightFor(inkAvailW'));
+ok('the ink strip height is computed in exactly one place',
+    (html.match(/function inkBoxHeightFor/g) || []).length === 1 &&
+    (html.match(/inkBoxHeightFor\(/g) || []).length >= 4);
+ok('the workspace mode is remembered across reloads',
+    html.includes('localStorage.getItem(WORKSPACE_MODE_KEY)') &&
+    html.includes('localStorage.setItem(WORKSPACE_MODE_KEY,'));
 ok('branches are drawn as smooth curves, not straight diagonals',
     /bezierCurveTo/.test(extractFn(html, 'drawMindMapConnectors')));
 ok('the builder never touches the network',

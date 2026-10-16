@@ -2990,41 +2990,50 @@
             }
         }
 
+        const WORKSPACE_MODE_KEY = 'salname_workspace_mode';
+
+        /**
+         * Paints the mode switcher and shows the matching sub-toolbar. Deliberately does NOT
+         * touch the ink buffers — it is also used at startup to restore the saved mode before
+         * the first page load has decided which buffers to fill.
+         */
+        function applyWorkspaceModeUI(targetMode) {
+            const btnPlanner = document.getElementById('btn-mode-planner');
+            const btnMindmap = document.getElementById('btn-mode-mindmap');
+            const subPlanner = document.getElementById('subbar-planner-priorities');
+            const subMindmap = document.getElementById('subbar-mindmap-controls');
+            const activeCls = 'px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-slate-900 shadow-sm transition flex items-center gap-1';
+            const idleCls = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-600 hover:text-slate-900 transition flex items-center gap-1';
+            const isMindmap = targetMode === 'mindmap';
+
+            btnMindmap.className = isMindmap ? activeCls : idleCls;
+            btnPlanner.className = isMindmap ? idleCls : activeCls;
+            subPlanner.classList.toggle('hidden', isMindmap);
+            subMindmap.classList.toggle('hidden', !isMindmap);
+            subMindmap.classList.toggle('flex', isMindmap);
+        }
+
         function switchWorkspaceMode(targetMode) {
             if (AppState.workspaceMode === targetMode) return;
             syncActiveBuffersToStorage();
             clearSelection();
             AppState.workspaceMode = targetMode;
+            applyWorkspaceModeUI(targetMode);
+            // Remember the mode across reloads, so a tree the user just built does not look
+            // as if it had vanished when the page comes back in the other mode.
+            try { localStorage.setItem(WORKSPACE_MODE_KEY, targetMode); } catch (_) {}
 
-            const btnPlanner = document.getElementById('btn-mode-planner');
-            const btnMindmap = document.getElementById('btn-mode-mindmap');
-            const subPlanner = document.getElementById('subbar-planner-priorities');
-            const subMindmap = document.getElementById('subbar-mindmap-controls');
-
+            // The Mind-Map canvas starts empty on purpose — the user adds branches with
+            // «+ مبحث اصلی جدید» whenever they want. Auto-seeding a starter tree here meant
+            // a deleted tree kept reappearing on every re-entry.
             if (targetMode === 'mindmap') {
                 AppState.strokes = AppState.mindmapData.strokes;
                 AppState.texts = AppState.mindmapData.texts;
                 AppState.symbols = AppState.mindmapData.symbols;
-
-                btnMindmap.className = 'px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-slate-900 shadow-sm transition flex items-center gap-1';
-                btnPlanner.className = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-600 hover:text-slate-900 transition flex items-center gap-1';
-                subPlanner.classList.add('hidden');
-                subMindmap.classList.remove('hidden');
-                subMindmap.classList.add('flex');
-
-                // The canvas starts empty on purpose — the user adds branches with
-                // «+ مبحث اصلی جدید» whenever they want. Auto-seeding a starter tree
-                // here meant a deleted tree kept reappearing on every re-entry.
             } else {
                 AppState.strokes = AppState.plannerData.strokes;
                 AppState.texts = AppState.plannerData.texts;
                 AppState.symbols = AppState.plannerData.symbols;
-
-                btnPlanner.className = 'px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-slate-900 shadow-sm transition flex items-center gap-1';
-                btnMindmap.className = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-600 hover:text-slate-900 transition flex items-center gap-1';
-                subMindmap.classList.add('hidden');
-                subMindmap.classList.remove('flex');
-                subPlanner.classList.remove('hidden');
             }
 
             AppState.undoStack = [];
@@ -4748,12 +4757,16 @@
             const byHeight = boxes.map(b => b.h).sort((a, b) => a - b);
             const tallH = byHeight[Math.floor(byHeight.length * 0.9)] || byHeight[byHeight.length - 1] || 18;
 
-            // A dot is small AND compact (its width is not much bigger than its height). A short
-            // dash or a highlighter sweep is small but wide, and must stay a line of its own.
-            const bodyLimit = tallH * 0.75;
-            const isFloating = b => b.h <= bodyLimit && b.w <= bodyLimit;
-            let lineBoxes = boxes.filter(b => !isFloating(b));
-            let floating = boxes.filter(isFloating);
+            // A dot is a stroke that fits inside a letter's height in BOTH directions: the dots
+            // of پ/ت/چ/ج/ق/ی drawn as little circles, a tap, a hamza, a single small letter.
+            // Testing both dimensions is what makes this robust — a written word is a LONG
+            // stroke, so it can never be mistaken for a dot, and a big hand-drawn dot is still
+            // a dot even when the letters around it are not much taller, which is exactly the
+            // case a pure size threshold gets wrong.
+            const dotLimit = tallH;
+            const isDotLike = b => b.w <= dotLimit && b.h <= dotLimit;
+            let lineBoxes = boxes.filter(b => !isDotLike(b));
+            let floating = boxes.filter(isDotLike);
             if (lineBoxes.length === 0) { lineBoxes = boxes.slice(); floating = []; }   // nothing but dots
 
             // 1. Text lines are built from the line-like strokes.
@@ -4846,6 +4859,55 @@
         }
 
         /**
+         * The height a card's ink strip should take at the given width. Height comes from the
+         * ink's own aspect ratio, so a tall block gets a tall card and a single line stays a
+         * thin strip; deriving it from the card height instead would fight the measured header
+         * height. The 22px floor keeps even one lone dot visible, and MAX_INK_SCALE stops a
+         * two-letter word or a single dot from being blown up into a poster.
+         *
+         * One function for all three callers (the DOM card, the first layout pass and the PNG
+         * export) so they can never disagree.
+         */
+        function inkBoxHeightFor(availW, inkW, inkH) {
+            const w = Math.max(1, inkW || 1);
+            const h = Math.max(1, inkH || 1);
+            return Math.min(
+                Math.max(Math.round(availW * (h / w)), 22),
+                130,
+                Math.max(22, Math.round(h * MAX_INK_SCALE))
+            );
+        }
+
+        /** Paints preserved strokes onto any 2D context, highlighter kept translucent. */
+        function paintInkStrokes(ctx, strokes) {
+            (strokes || []).forEach(s => {
+                if (s.tool === 'highlighter') {
+                    ctx.globalAlpha = 0.45;
+                    InkBeautifier.renderSmoothStroke(ctx, s);
+                    ctx.globalAlpha = 1;
+                } else {
+                    InkBeautifier.renderSmoothStroke(ctx, s);
+                }
+            });
+        }
+
+        /**
+         * Draws one card's handwriting into an arbitrary box on an arbitrary context — used by
+         * the PNG export, which would otherwise print an empty white box for every card that
+         * was built from handwriting (those cards carry ink, not text).
+         */
+        function drawNodeInkInto(ctx, node, boxX, boxY, boxW, boxH) {
+            const inkW = Math.max(1, node.inkW || 1);
+            const inkH = Math.max(1, node.inkH || 1);
+            const scale = Math.min(boxW / inkW, boxH / inkH);
+            ctx.save();
+            ctx.translate(boxX + (boxW - inkW * scale) / 2, boxY + (boxH - inkH * scale) / 2);
+            ctx.scale(scale, scale);
+            paintInkStrokes(ctx, node.inkStrokes);
+            ctx.restore();
+        }
+
+        /**
          * Renders one card's preserved handwriting. The strokes are stored relative to the
          * block origin, so they only need scaling to fit the card — they stay vector, and
          * therefore stay sharp at any size.
@@ -4854,14 +4916,7 @@
             const availW = Math.max(40, (node.w || 150) - 24);   // card padding + borders
             const inkW = Math.max(1, node.inkW || 1);
             const inkH = Math.max(1, node.inkH || 1);
-
-            // Height comes from the ink's own aspect ratio at the card's real width, so a
-            // tall block gets a tall card and a single line stays a thin strip. Deriving it
-            // from the card height instead would fight the measured header height. The 22px
-            // floor keeps even one lone dot visible; MAX_INK_SCALE stops a two-letter word or
-            // a single dot from being blown up into a poster.
-            const ratioH = Math.round(availW * (inkH / inkW));
-            const availH = Math.min(Math.max(ratioH, 22), 130, Math.max(22, Math.round(inkH * MAX_INK_SCALE)));
+            const availH = inkBoxHeightFor(availW, inkW, inkH);
 
             const cv = document.createElement('canvas');
             cv.className = 'mindmap-node-ink';
@@ -4878,15 +4933,7 @@
             g.translate((availW - inkW * scale) / 2, (availH - inkH * scale) / 2);
             g.scale(scale, scale);
 
-            (node.inkStrokes || []).forEach(s => {
-                if (s.tool === 'highlighter') {
-                    g.globalAlpha = 0.45;
-                    InkBeautifier.renderSmoothStroke(g, s);
-                    g.globalAlpha = 1;
-                } else {
-                    InkBeautifier.renderSmoothStroke(g, s);
-                }
-            });
+            paintInkStrokes(g, node.inkStrokes);
             return cv;
         }
 
@@ -4940,13 +4987,9 @@
             usable.forEach((block, i) => {
                 const w = 170;
                 // Rough card height for the first layout pass; the real size is measured from
-                // the DOM right after rendering. Same cap as the real canvas, so the first pass
-                // and the final render agree.
-                const estH = Math.min(
-                    Math.max(Math.round((w - 24) * (block.inkH / block.inkW)), 22),
-                    130,
-                    Math.max(22, Math.round(block.inkH * MAX_INK_SCALE))
-                );
+                // the DOM right after rendering. Same helper as the real canvas, so the first
+                // pass and the final render can never disagree.
+                const estH = inkBoxHeightFor(w - 24, block.inkW, block.inkH);
 
                 AppState.mindmapData.nodes.push({
                     id: block.id,
@@ -6132,6 +6175,17 @@
                     exCtx.textBaseline = 'middle';
                     exCtx.fillText(toPersianDigits(n.text || ''), n.x + nw / 2, n.y + nh / 2 + 4);
                     exCtx.restore();
+
+                    // Cards built from handwriting carry ink, not text. Without this the export
+                    // would print an empty white box for every one of them.
+                    if (Array.isArray(n.inkStrokes) && n.inkStrokes.length > 0) {
+                        const inkAvailW = Math.max(40, nw - 24);
+                        drawNodeInkInto(
+                            exCtx, n,
+                            n.x + 12, n.y + 27,
+                            inkAvailW, inkBoxHeightFor(inkAvailW, n.inkW, n.inkH)
+                        );
+                    }
                 });
             }
 
@@ -6147,6 +6201,14 @@
          * ============================================================================
          */
         window.addEventListener('DOMContentLoaded', async () => {
+            // Come back in the mode the user left. Otherwise a tree built from handwriting is
+            // still stored but invisible, which reads as "my work is gone".
+            try {
+                const savedMode = localStorage.getItem(WORKSPACE_MODE_KEY);
+                if (savedMode === 'mindmap' || savedMode === 'planner') AppState.workspaceMode = savedMode;
+            } catch (_) {}
+            applyWorkspaceModeUI(AppState.workspaceMode);
+
             await dbEngine.init();
             await loadGeminiKeyFromDB();
             resizeCanvases();
