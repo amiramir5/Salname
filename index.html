@@ -254,37 +254,96 @@
             flex-direction: column;
             align-items: center;
             vertical-align: middle;
-            margin: 0 3px;
-            font-size: 0.9em;
+            margin: 0 4px;
+            font-size: 0.95em;
             line-height: 1.15;
+            unicode-bidi: isolate !important;
         }
         .math-frac > .num {
             border-bottom: 1.5px solid currentColor;
-            padding: 0 4px 1px 4px;
+            padding: 0 4px 2px 4px;
             text-align: center;
+            width: 100%;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            unicode-bidi: isolate !important;
         }
         .math-frac > .den {
-            padding: 1px 4px 0 4px;
+            padding: 2px 4px 0 4px;
             text-align: center;
+            width: 100%;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            unicode-bidi: isolate !important;
         }
         .chem-sub {
             font-size: 0.75em;
             vertical-align: sub;
             line-height: 0;
+            unicode-bidi: isolate !important;
         }
         .math-sup {
             font-size: 0.75em;
             vertical-align: super;
             line-height: 0;
+            unicode-bidi: isolate !important;
+        }
+        .math-eq-row {
+            display: inline-flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+            gap: 5px;
+            direction: rtl !important;
+            unicode-bidi: isolate !important;
+            vertical-align: middle;
+        }
+        .math-num-row {
+            display: inline-flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            direction: rtl !important;
+            unicode-bidi: isolate !important;
+            vertical-align: middle;
+        }
+        .math-segment {
+            display: inline-flex;
+            align-items: center;
+            direction: rtl !important;
+            unicode-bidi: isolate !important;
+            vertical-align: middle;
+        }
+        .math-term {
+            display: inline-block;
+            unicode-bidi: isolate !important;
+            vertical-align: middle;
+        }
+        .math-op-eq, .math-op-sub {
+            display: inline-block;
+            margin: 0 3px;
+            font-weight: 700;
+            color: #334155;
+            unicode-bidi: isolate !important;
         }
         /* Isolated LTR Chemical & Structural Formula Token inside RTL Persian Text */
         .chem-token {
             display: inline-block;
-            direction: ltr;
-            unicode-bidi: isolate;
+            direction: ltr !important;
+            unicode-bidi: isolate !important;
             font-family: 'Vazirmatn', sans-serif;
             margin: 0 2px;
             white-space: nowrap;
+        }
+        .persian-token {
+            display: inline-block;
+            direction: rtl !important;
+            unicode-bidi: isolate !important;
+            margin: 0 1px;
         }
         .katex {
             direction: ltr;
@@ -1010,123 +1069,170 @@
         }
 
         /**
-         * Fixes RTL/LTR reversal issues when Vision AI scans a Persian RTL equation from Left-to-Right:
-         * 1. Converts `\frac{...}{...} = <Persian Subject>` -> `<Persian Subject> = \frac{...}{...}`
-         * 2. Converts reversed subtractions like `C3H8O3 - استر` or `3H2O - استر` -> `استر - ...`
-         */
-        function fixReversedPersianMath(rawStr) {
-            if (!rawStr) return '';
-            let s = String(rawStr);
-
-            // Process line by line to preserve multi-line headers
-            return s.split('\n').map(line => {
-                let l = line.trim();
-
-                // 1. If a line starts with \frac{...}{...} and ends with `= <Persian Words>`, flip the equality sides
-                const eqFracMatch = l.match(/^(\\frac\{[\s\S]+\}\{[^{}]+\})\s*=\s*([\u0600-\u06FF][\u0600-\u06FF\s‌0-9\u06F0-\u06F9]*)$/);
-                if (eqFracMatch) {
-                    l = `${eqFracMatch[2].trim()} = ${eqFracMatch[1].trim()}`;
-                }
-
-                // 2. Inside \frac{A - B}{C}, if A is a small formula/number (like C3H8O3, 3H2O, C3H2) and B is a Persian macromolecule (استر, چربی, پلیمر, پروتئین, پپتید), flip A and B
-                l = l.replace(/\\frac\{\s*([0-9\u06F0-\u06F9A-Za-z_{}\(\)\s]+?)\s*-\s*([\u0600-\u06FF][\u0600-\u06FF\s‌0-9\u06F0-\u06F9]*?)\s*\}/g, (m, leftPart, rightPersian) => {
-                    if (/[A-Za-z]/.test(leftPart)) {
-                        return `\\frac{${rightPersian.trim()} - ${leftPart.trim()}}`;
-                    }
-                    return m;
-                });
-
-                return l;
-            }).join('\n');
-        }
-
-        /**
-         * Formats an isolated chemical or structural formula (e.g. C_8H_18, C_{3H8O3}, CH_3-C(=O)-CH_3, 3H_2O)
-         * so that each element's subscript ONLY attaches to its own digits, wrapped in a strict dir="ltr" span.
+         * Formats an isolated chemical or structural formula (e.g. C_8H_18, C_3H_8O_3, CH_3-C(=O)-CH_3, 3H_2O)
+         * strictly in LTR isolation so elements and bonds never flip in RTL Persian sentences.
          */
         function formatSingleChemicalToken(chemStr) {
-            let c = chemStr;
+            let c = escapeHtmlSafe(chemStr);
             // 1. Unwrap malformed multi-element braces like C_{8H18} or C_{3H8O3}
             c = c.replace(/_\{([0-9\u06F0-\u06F9]+[A-Za-z][A-Za-z0-9\u06F0-\u06F9_]*)\}/g, '$1');
             // 2. Convert element or closing paren followed by _{digits}, _digits, or digits into proper subscript
             c = c.replace(/([A-Z][a-z]?|\))(?:_\{([0-9\u06F0-\u06F9nxyz]+)\}|_([0-9\u06F0-\u06F9nxyz]+)|([0-9\u06F0-\u06F9]+))/g, (_, el, d1, d2, d3) => {
                 const subVal = d1 || d2 || d3;
-                return `${el}<sub class="chem-sub">${subVal}</sub>`;
+                return `${el}<sub class="chem-sub">${toPersianDigits(subVal)}</sub>`;
             });
             // 3. Convert any remaining explicit _{...} or ^{...}
-            c = c.replace(/_\{([^{}]+)\}/g, '<sub class="chem-sub">$1</sub>');
-            c = c.replace(/\^\{([^{}]+)\}/g, '<sup class="math-sup">$1</sup>');
-            return `<span class="chem-token" dir="ltr">${c}</span>`;
+            c = c.replace(/_\{([^{}]+)\}/g, (_, sub) => `<sub class="chem-sub">${toPersianDigits(sub)}</sub>`);
+            c = c.replace(/\^\{([^{}]+)\}/g, (_, sup) => `<sup class="math-sup">${toPersianDigits(sup)}</sup>`);
+            return `<span class="chem-token" dir="ltr"><bdi>${c}</bdi></span>`;
         }
 
         /**
-         * Converts LaTeX / Inline Math & Chemical Formulas into Word-like Stacked Fractions,
-         * Subscripts (H₂O, C₅₇H₁₀₄O₆, C₈H₁₈), Superscripts (x²), and Reaction Arrows.
+         * Renders raw math/chem terms, isolating chemical formulas in LTR and Persian phrases in RTL
          */
-        function renderFormattedMathAndChem(rawText) {
-            if (!rawText) return '';
-            let text = fixReversedPersianMath(String(rawText));
+        function renderSingleTerm(rawTerm) {
+            if (!rawTerm) return '';
+            let s = String(rawTerm).trim();
 
-            // Strip $...$ or $$...$$ delimiters so our unified Persian+Chemistry parser handles mixed RTL/LTR seamlessly
-            text = text.replace(/\$\$([\s\S]+?)\$\$|\$([^\$]+?)\$/g, (_, b, i) => b || i || '');
-
-            return parseNativeMathExpression(text);
-        }
-
-        function parseNativeMathExpression(str) {
-            let s = escapeHtmlSafe(str);
-
-            // 1. Unwrap \text{...}, \mathrm{...}, \mathbf{...} FIRST so inner braces don't block \frac
+            // Unwrap LaTeX text wrappers
             let textSafety = 0;
             while (/\\(?:text|mathrm|mathbf)\{([^{}]*)\}/.test(s) && textSafety < 6) {
                 s = s.replace(/\\(?:text|mathrm|mathbf)\{([^{}]*)\}/g, '$1');
                 textSafety++;
             }
 
-            // 2. Unwrap malformed multi-element subscript braces like C_{8H18} or C_{3H8O3}
-            s = s.replace(/_\{([0-9\u06F0-\u06F9]+[A-Z][a-zA-Z0-9\u06F0-\u06F9_]*)\}/g, '$1');
-
-            // 3. Detect & isolate contiguous chemical / structural formulas (e.g., CH_3-C(=O)-CH_3, C_8H_18, 3H_2O, C_{57}H_{104}O_6)
-            // Must contain at least one chemical element with a subscript/number or structural bond
+            // Chemical formula matching regex
             const chemPattern = /(?:[0-9\u06F0-\u06F9]+\s*)?(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?(?:(?:[-=]+|\([=A-Za-z0-9\u06F0-\u06F9_]+\))(?:[A-Z][a-z]?|\([A-Za-z0-9\u06F0-\u06F9_=]+\))(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?|[A-Z][a-z]?(?:_\{[0-9\u06F0-\u06F9nxyz]+\}|_[0-9\u06F0-\u06F9nxyz]+|[0-9\u06F0-\u06F9]+)?)+/g;
+
             s = s.replace(chemPattern, (match) => {
-                // Only treat as chemical token if it has a number, subscript, or structural bond/parenthesis
                 if (/[0-9\u06F0-\u06F9_=\(\)-]/.test(match)) {
                     return formatSingleChemicalToken(match);
                 }
                 return match;
             });
 
-            // 4. Handle any remaining explicit _{...} and _{x} (only digits or single lowercase letter, NEVER uppercase [A-Z])
-            s = s.replace(/_\{([^{}]+)\}/g, '<sub class="chem-sub">$1</sub>');
-            s = s.replace(/_([0-9\u06F0-\u06F9]+|[a-z])/g, '<sub class="chem-sub">$1</sub>');
+            // Convert remaining subscripts & superscripts
+            s = s.replace(/_\{([^{}]+)\}/g, (_, sub) => `<sub class="chem-sub">${toPersianDigits(sub)}</sub>`);
+            s = s.replace(/_([0-9\u06F0-\u06F9]+|[a-z])/g, (_, sub) => `<sub class="chem-sub">${toPersianDigits(sub)}</sub>`);
+            s = s.replace(/\^\{([^{}]+)\}/g, (_, sup) => `<sup class="math-sup">${toPersianDigits(sup)}</sup>`);
+            s = s.replace(/\^([0-9\u06F0-\u06F9\+\-]+|[a-z])/g, (_, sup) => `<sup class="math-sup">${toPersianDigits(sup)}</sup>`);
 
-            // 5. Handle explicit ^{...} and ^x superscripts
-            s = s.replace(/\^\{([^{}]+)\}/g, '<sup class="math-sup">$1</sup>');
-            s = s.replace(/\^([0-9\u06F0-\u06F9\+\-]+|[a-z])/g, '<sup class="math-sup">$1</sup>');
-
-            // 6. Now that all inner curly braces are resolved, parse nested or multiple \frac{num}{den} into stacked fractions
-            const fracRegex = /\\frac\{([^{}]+)\}\{([^{}]+)\}/g;
-            let safety = 0;
-            while (fracRegex.test(s) && safety < 6) {
-                s = s.replace(fracRegex, (_, num, den) => {
-                    return `<span class="math-frac" dir="rtl"><span class="num" dir="rtl">${num}</span><span class="den" dir="rtl">${den}</span></span>`;
-                });
-                safety++;
-            }
-
-            // 7. Replace arrows & math symbols (In Persian RTL lines, reaction arrows point right-to-left ←)
-            const hasPersian = /[\u0600-\u06FF]/.test(s);
-            const arrowChar = hasPersian ? ' ← ' : ' → ';
-            s = s.replace(/\\rightarrow|\\leftarrow|--&gt;|&lt;--|-&gt;|&lt;-|→/g, arrowChar)
+            // Normalize reaction arrows & arithmetic symbols
+            s = s.replace(/\\rightarrow|--&gt;|-&gt;|→/g, ' ← ')
+                 .replace(/\\leftarrow|&lt;--|&lt;-|←/g, ' → ')
                  .replace(/\\leftrightarrow|\\rightleftharpoons|&lt;-&gt;/g, ' ⇌ ')
                  .replace(/\\times|\*/g, ' × ')
                  .replace(/\\div/g, ' ÷ ')
                  .replace(/\\pm/g, ' ± ')
                  .replace(/\\Delta/g, 'Δ');
 
-            // 8. Convert all digits to Persian digits
-            return s.replace(/\d/g, d => PERSIAN_DIGITS[parseInt(d, 10)]).replace(/\n/g, '<br>');
+            // Wrap in isolated Persian/neutral container
+            return `<span class="persian-token" dir="rtl"><bdi>${toPersianDigits(s)}</bdi></span>`;
+        }
+
+        /**
+         * Renders subtraction or addition terms inside numerators using Flexbox order
+         * ensuring Term 1 stays strictly on the right and Term 2 on the left.
+         */
+        function renderNumeratorExpression(numStr) {
+            const raw = String(numStr).trim();
+            // Check for subtraction or addition operator
+            if (raw.includes(' - ') || (raw.includes('-') && !raw.startsWith('-') && !raw.includes('->'))) {
+                const parts = raw.split(/\s*-\s*/);
+                if (parts.length === 2) {
+                    return `<span class="math-num-row" dir="rtl">` +
+                           `<span class="math-term">${renderSingleTerm(parts[0])}</span>` +
+                           `<span class="math-op-sub">−</span>` +
+                           `<span class="math-term">${renderSingleTerm(parts[1])}</span>` +
+                           `</span>`;
+                }
+            } else if (raw.includes(' + ')) {
+                const parts = raw.split(/\s*\+\s*/);
+                if (parts.length === 2) {
+                    return `<span class="math-num-row" dir="rtl">` +
+                           `<span class="math-term">${renderSingleTerm(parts[0])}</span>` +
+                           `<span class="math-op-sub">+</span>` +
+                           `<span class="math-term">${renderSingleTerm(parts[1])}</span>` +
+                           `</span>`;
+                }
+            }
+            return renderSingleTerm(raw);
+        }
+
+        /**
+         * Renders fractions with Word-like stacked layout without BiDi shuffling
+         */
+        function renderFractionExpression(fracFullStr) {
+            const fracRegex = /\\frac\{([^{}]+)\}\{([^{}]+)\}/;
+            const match = fracFullStr.match(fracRegex);
+            if (!match) return renderSingleTerm(fracFullStr);
+
+            const numHtml = renderNumeratorExpression(match[1]);
+            const denHtml = renderSingleTerm(match[2]);
+
+            const renderedFrac = `<span class="math-frac" dir="rtl">` +
+                                 `<span class="num" dir="rtl">${numHtml}</span>` +
+                                 `<span class="den" dir="rtl">${denHtml}</span>` +
+                                 `</span>`;
+
+            return fracFullStr.replace(fracRegex, renderedFrac);
+        }
+
+        /**
+         * Core Formula Line Renderer: Splits equations by '=' and renders them
+         * in an RTL flex container where Left-Hand Side is on the Right, and Right-Hand Side is on the Left.
+         */
+        function parseFormulaLine(lineStr) {
+            if (!lineStr) return '';
+            let s = lineStr.trim();
+
+            // Check if line contains an equality or reaction symbol
+            const eqOp = s.includes(' = ') ? ' = ' : (s.includes('=') && !s.includes('(=') ? '=' : null);
+            if (eqOp) {
+                const eqParts = s.split(eqOp);
+                if (eqParts.length === 2) {
+                    const side1 = renderFractionExpression(eqParts[0].trim());
+                    const side2 = renderFractionExpression(eqParts[1].trim());
+
+                    return `<span class="math-eq-row" dir="rtl">` +
+                           `<span class="math-segment" dir="rtl">${side1}</span>` +
+                           `<span class="math-op-eq">=</span>` +
+                           `<span class="math-segment" dir="rtl">${side2}</span>` +
+                           `</span>`;
+                }
+            }
+
+            // Reaction arrow equation (A + B → C)
+            if (s.includes(' → ') || s.includes(' ← ') || s.includes(' ⇌ ')) {
+                const arrow = s.includes(' ⇌ ') ? ' ⇌ ' : (s.includes(' → ') ? ' → ' : ' ← ');
+                const parts = s.split(arrow);
+                if (parts.length === 2) {
+                    const side1 = renderFractionExpression(parts[0].trim());
+                    const side2 = renderFractionExpression(parts[1].trim());
+
+                    return `<span class="math-eq-row" dir="rtl">` +
+                           `<span class="math-segment" dir="rtl">${side1}</span>` +
+                           `<span class="math-op-eq">${arrow}</span>` +
+                           `<span class="math-segment" dir="rtl">${side2}</span>` +
+                           `</span>`;
+                }
+            }
+
+            // Single expression or fraction without equality
+            return renderFractionExpression(s);
+        }
+
+        /**
+         * Converts multi-line formulas & LaTeX into Word-grade BiDi-safe Persian representations
+         */
+        function renderFormattedMathAndChem(rawText) {
+            if (!rawText) return '';
+            let text = String(rawText).trim();
+
+            // Strip $...$ or $$...$$ delimiters
+            text = text.replace(/\$\$([\s\S]+?)\$\$|\$([^\$]+?)\$/g, (_, b, i) => b || i || '');
+
+            return text.split('\n').map(line => parseFormulaLine(line)).join('<br>');
         }
 
         /**
@@ -2257,24 +2363,34 @@
 
                 // Flip Formula Direction Button (⇄) for instant RTL/LTR equation or subtraction swap
                 const btnFlip = document.createElement('button');
-                btnFlip.className = 'px-1 py-0.2 bg-white/80 hover:bg-purple-50 text-purple-700 border border-slate-200 rounded font-bold transition';
-                btnFlip.title = 'برعکس کردن جهت تفریق یا تساوی فرمول (چپ/راست)';
+                btnFlip.className = 'px-1.5 py-0.2 bg-white/80 hover:bg-purple-50 text-purple-700 border border-slate-200 rounded font-bold transition text-[11px]';
+                btnFlip.title = 'چرخش جهات فرمول (جابه‌جایی دو طرف مساوی یا منها)';
                 btnFlip.textContent = '⇄';
                 btnFlip.addEventListener('pointerdown', e => e.stopPropagation());
                 btnFlip.addEventListener('click', (e) => {
                     e.stopPropagation();
                     pushUndoState();
-                    let txt = node.text || '';
-                    // Flip A - B inside \frac{A - B}{C} or general A - B
-                    if (/\\frac\{([^{}]+?)-([^{}]+?)\}/.test(txt)) {
+                    let txt = (node.text || '').trim();
+
+                    // 1. If equation has a fraction with minus, cycle between (1) flip numerator, (2) flip equality, (3) both
+                    const hasFracMinus = /\\frac\{([^{}]+?)\s*-\s*([^{}]+?)\}/.test(txt);
+                    const hasEq = txt.includes('=');
+
+                    if (hasFracMinus && hasEq) {
+                        // Cycle numerator subtraction first
+                        txt = txt.replace(/\\frac\{([^{}]+?)\s*-\s*([^{}]+?)\}/g, '\\frac{$2 - $1}');
+                    } else if (hasEq) {
+                        const eqParts = txt.split('=');
+                        if (eqParts.length === 2) {
+                            txt = `${eqParts[1].trim()} = ${eqParts[0].trim()}`;
+                        }
+                    } else if (hasFracMinus) {
                         txt = txt.replace(/\\frac\{([^{}]+?)\s*-\s*([^{}]+?)\}/g, '\\frac{$2 - $1}');
                     } else if (txt.includes(' - ')) {
                         const parts = txt.split(' - ');
                         if (parts.length === 2) txt = `${parts[1].trim()} - ${parts[0].trim()}`;
-                    } else if (txt.includes('=')) {
-                        const eqParts = txt.split('=');
-                        if (eqParts.length === 2) txt = `${eqParts[1].trim()} = ${eqParts[0].trim()}`;
                     }
+
                     node.text = txt;
                     renderMindMapDOMNodes();
                     renderAllLayers();
@@ -4225,21 +4341,22 @@
 
             try {
                 const systemPrompt = [
-                    "تو یک استاد برجسته و طراح سوال کنکور سراسری ایران (مسلط به خط‌به‌خط کتاب‌های درسی شیمی، زیست‌شناسی، فیزیک و ریاضی پایه‌های دهم، یازدهم و دوازدهم نظام جدید ایران) و متخصص OCR دست‌خط فارسی هستی.",
-                    "قوانین بسیار سخت‌گیرانه که باید ۱۰۰٪ رعایت کنی:",
-                    "۱. وفاداری مطلق به ترتیب دست‌خط کاربر: تمام کلمات، جملات، صورت و مخرج کسرها، ضرایب و زیروندها را بدون جا انداختن و دقیقاً با همان ترتیب نوشتاری کاربر استخراج کن.",
+                    "تو یک طراح ارشد کنکور سراسری ایران (مسلط به خط‌به‌خط کتاب‌های درسی شیمی، زیست‌شناسی، فیزیک و ریاضی دهم، یازدهم و دوازدهم نظام جدید ایران) و متخصص OCR دست‌خط فارسی هستی.",
+                    "قوانین حیاتی و غیرقابل تغییر که باید ۱۰۰٪ اجرا کنی:",
+                    "۱. وفاداری مطلق به ترتیب دست‌خط کاربر: تمام کلمات، صورت و مخرج کسرها، ضرایب و زیروندها را دقیقاً با همان ترتیبی که کاربر روی کاغذ نوشته استخراج کن و هرگز جای دو طرف تساوی یا منها را جابه‌جا نکن.",
                     "۲. حفظ دقیق طرفین فرمول و تفریق‌ها:",
-                    "   - اگر کاربر در صورت کسر نوشته «C3H2 - استر»، در خروجی دقیقاً بنویس: \\frac{C_3H_2 - استر}{3} و هرگز جای دو طرف منها را برعکس نکن.",
-                    "   - اگر فرمول با کسر شروع شده و با مساوی تمام شده (مثلاً \\frac{...}{3} = اسید چرب)، دقیقاً همان ترتیب را حفظ کن و طرفین تساوی را تغییر نده.",
+                    "   - اگر کاربر در صورت کسر نوشته «C3H2 - استر»، در خروجی عیناً بنویس: \\frac{C_3H_2 - استر}{3}.",
+                    "   - اگر در صورت کسر نوشته «استر - C3H2»، عیناً بنویس: \\frac{استر - C_3H_2}{3}.",
+                    "   - اگر فرمول با کسر شروع شده و با مساوی تمام شده (مانند \\frac{...}{3} = اسید چرب)، دقیقاً همین ترتیب را بنویس و هرگز آن را به اسید چرب = ... تبدیل نکن.",
                     "۳. فرمت استاندارد فرمول‌های شیمی و ریاضی:",
                     "   - کسرها را حتماً با \\frac{صورت}{مخرج} بنویس.",
-                    "   - در فرمول‌های شیمیایی، زیروند هر عنصر را فقط برای عدد همان عنصر بگذار (مثلاً C_8H_{18} یا C_{57}H_{104}O_6 یا 3H_2O یا CH_3-C(=O)-CH_3) و هرگز چند عنصر را یکجا داخل یک زیروند نبر.",
-                    "۴. بررسی فقط و فقط طبق «کتاب درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی!):",
-                    "   - معیار علمی تو در بخش scientificReviews باید ۱۰۰٪ منطبق بر کتاب‌های درسی رسمی دبیرستان ایران و تکنیک‌های محاسباتی کنکور ایران باشد.",
-                    "   - اگر دانش‌آموز در دست‌خط خود عددی یا فرمولی را برخلاف کتاب درسی یا کنکور نوشته بود، در آرایه scientificReviews بدون تغییر سرخود در نمودار، دلیل علمی را توضیح بده تا خودش تصمیم بگیرد."
+                    "   - در فرمول‌های شیمیایی، زیروند هر عنصر را فقط برای عدد همان عنصر بگذار (مانند C_3H_8O_3 یا C_8H_{18} یا C_{57}H_{104}O_6 یا 3H_2O یا CH_3-C(=O)-CH_3) و هرگز چند عنصر را داخل یک زیروند نبر.",
+                    "۴. بررسی علمی فقط و فقط طبق «کتاب‌های درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی):",
+                    "   - معیار علمی تو در آرایه scientificReviews باید ۱۰۰٪ منطبق بر کتاب‌های رسمی درسی آموزش و پرورش ایران و تست‌های کنکور باشد.",
+                    "   - اگر دانش‌آموز فرمولی را مغایر با کتاب رسمی نوشته بود، در نمودار دست نزن بلکه در scientificReviews دلیلش را توضیح بده تا خودش با یک کلیک تصمیم بگیرد."
                 ].join("\n");
 
-                const userPrompt = "لطفاً تمام نوشته‌ها و فرمول‌های ریاضی/شیمی داخل این تصویر دست‌خط را با حفظ ترتیب دقیق نوشتاری دست‌خط من استخراج کن (جای طرفین منها و مساوی را تغییر نده)، زیروند هر عنصر را جداگانه بنویس، به درختواره تبدیل کن و بررسی‌های لازم را در scientificReviews بیاور.";
+                const userPrompt = "لطفاً تمام نوشته‌ها و فرمول‌های ریاضی و شیمی داخل این تصویر را با حفظ دقیق ترتیب نوشتاری دست‌خط من (بدون تغییر جای طرفین منها و مساوی) استخراج کن، به درختواره فرمولی تبدیل کن و نکات لازم را در scientificReviews بیاور.";
 
                 const payload = {
                     contents: [{
