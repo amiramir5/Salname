@@ -473,6 +473,23 @@ ok('structure pictures grow the paper instead of being clipped',
     html.includes('function ensureStageHeight') && html.includes('ensureStageHeight(y - 24)'));
 ok('the reference/handwriting toggle needs both pictures to exist',
     html.includes('if (imageObj.webImageUrl && imageObj.dataUrl) {'));
+ok('a handwriting card is sized from its ink so the writing is not shrunk',
+    /const w = Math\.min\(330, Math\.max\(180, Math\.round\(block\.inkW \+ 24\)\)\)/.test(html));
+ok('the mind-map spacing is derived from the widest card, not hard-coded',
+    html.includes('const widestCard = ()') &&
+    html.includes('const levelGapX = Math.min(') &&
+    !html.includes('const levelGapX = 235;'));
+ok('the layout is re-run once the real card width has been measured',
+    /Math\.abs\(measuredMaxW - assumedMaxW\) > 2/.test(html));
+ok('a corrupt tree cannot hang the layout', html.includes('depth > 40'));
+ok('the card header and body text are readable on a tablet',
+    html.includes('text-[11px] text-slate-500') && /font-size: 0\.95rem/.test(html));
+ok('undo/redo shortcuts use the physical key, so they work on a Persian keyboard',
+    html.includes("e.code === 'KeyZ'") && !html.includes("e.key.toLowerCase() === 'z'"));
+ok('the shortcuts do not steal text undo while typing in a field',
+    html.includes('t.isContentEditable'));
+ok('a dragged card is clamped against its own width',
+    html.includes('paperStage.clientWidth - (node.w || 150) - 8'));
 ok('undo restores the scientific reviews too',
     html.includes('mindmapReviews: AppState.mindmapData.reviews') &&
     html.includes('AppState.mindmapData.reviews = snap.mindmapReviews'));

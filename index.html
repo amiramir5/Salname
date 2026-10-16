@@ -217,13 +217,15 @@
         /* Unified Branching Tree Summary Nodes with Rich Math/Chemistry Support */
         .mindmap-node {
             position: absolute;
-            min-width: 135px;
-            max-width: 265px;
+            /* Wide enough that a card carrying the user's own handwriting can show that
+               handwriting at roughly its original size instead of shrinking it to 0.7x. */
+            min-width: 150px;
+            max-width: 330px;
             background: rgba(255, 255, 255, 0.96);
             border: 1.5px solid #CBD5E1;
             border-right: 4px solid #2563EB;
-            border-radius: 12px;
-            padding: 6px 9px;
+            border-radius: 13px;
+            padding: 7px 10px;
             box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
             cursor: grab;
             user-select: none;
@@ -255,10 +257,11 @@
         }
         .mindmap-node-rich {
             width: 100%;
-            font-size: 0.8rem;
+            /* 0.8rem was too small to read comfortably on a tablet at arm's length. */
+            font-size: 0.95rem;
             font-weight: 600;
             color: #0F172A;
-            line-height: 1.65;
+            line-height: 1.6;
             text-align: right;
             direction: rtl;
             word-break: break-word;
@@ -2636,7 +2639,7 @@
 
                 // Header bar inside node: Drag handle + Category/Color + Quick actions
                 const header = document.createElement('div');
-                header.className = 'flex items-center justify-between gap-1 mb-1 pb-0.5 border-b border-slate-200/70 text-[9px] text-slate-500';
+                header.className = 'flex items-center justify-between gap-1 mb-1 pb-1 border-b border-slate-200/70 text-[11px] text-slate-500';
 
                 const dragTitle = document.createElement('span');
                 dragTitle.className = 'font-bold cursor-grab select-none flex items-center gap-0.5';
@@ -2649,7 +2652,7 @@
 
                 // Edit Formula / Text Toggle Button
                 const btnEdit = document.createElement('button');
-                btnEdit.className = `px-1.5 py-0.2 rounded font-bold transition ${isEditing ? 'bg-emerald-600 text-white' : 'bg-white/80 hover:bg-white text-slate-700 border border-slate-200'}`;
+                btnEdit.className = `px-2 py-0.5 rounded font-bold transition ${isEditing ? 'bg-emerald-600 text-white' : 'bg-white/80 hover:bg-white text-slate-700 border border-slate-200'}`;
                 btnEdit.title = isEditing ? 'ثبت فرمول و متن' : 'ویرایش متن یا فرمول';
                 btnEdit.textContent = isEditing ? '✓ ثبت' : '✎';
                 btnEdit.addEventListener('pointerdown', e => e.stopPropagation());
@@ -2664,7 +2667,7 @@
 
                 // Flip Formula Direction Button (⇄) for instant RTL/LTR equation or subtraction swap
                 const btnFlip = document.createElement('button');
-                btnFlip.className = 'px-1.5 py-0.2 bg-white/80 hover:bg-purple-50 text-purple-700 border border-slate-200 rounded font-bold transition text-[11px] touch-manipulation';
+                btnFlip.className = 'px-2 py-0.5 bg-white/80 hover:bg-purple-50 text-purple-700 border border-slate-200 rounded font-bold transition text-[13px] touch-manipulation';
                 btnFlip.title = 'چرخش جهات فرمول (جابه‌جایی دو طرف مساوی یا منها)';
                 btnFlip.textContent = '⇄';
                 btnFlip.addEventListener('pointerdown', e => e.stopPropagation());
@@ -2680,7 +2683,7 @@
 
                 // Add Child Branch Button
                 const btnAddSub = document.createElement('button');
-                btnAddSub.className = 'px-1.5 py-0.2 bg-white/90 hover:bg-blue-50 text-blue-700 border border-blue-200 rounded font-bold transition';
+                btnAddSub.className = 'px-2 py-0.5 bg-white/90 hover:bg-blue-50 text-blue-700 border border-blue-200 rounded font-bold transition';
                 btnAddSub.title = 'افزودن انشعاب جدید';
                 btnAddSub.textContent = '+ شاخه';
                 btnAddSub.addEventListener('pointerdown', e => e.stopPropagation());
@@ -2693,7 +2696,7 @@
                 // Collapse / Expand Button (if has children)
                 if (children.length > 0) {
                     const btnCollapse = document.createElement('button');
-                    btnCollapse.className = 'px-1 py-0.2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded font-bold transition';
+                    btnCollapse.className = 'px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded font-bold transition';
                     btnCollapse.title = node.collapsed ? 'باز کردن زیرشاخه‌ها' : 'جمع کردن زیرشاخه‌ها';
                     btnCollapse.textContent = node.collapsed ? `+${toPersianDigits(children.length)}` : '−';
                     btnCollapse.addEventListener('pointerdown', e => e.stopPropagation());
@@ -2710,7 +2713,7 @@
 
                 // Cycle Color Button
                 const btnColor = document.createElement('button');
-                btnColor.className = 'w-3.5 h-3.5 rounded-full border border-white shadow-sm mx-0.5';
+                btnColor.className = 'w-4 h-4 rounded-full border border-white shadow-sm mx-0.5';
                 btnColor.style.backgroundColor = nodeColor;
                 btnColor.title = 'تغییر رنگ موضوعی شاخه';
                 btnColor.addEventListener('pointerdown', e => e.stopPropagation());
@@ -2726,7 +2729,7 @@
 
                 // Delete Node Button
                 const btnDel = document.createElement('button');
-                btnDel.className = 'px-1 hover:text-red-600 text-slate-400 font-bold';
+                btnDel.className = 'px-1.5 hover:text-red-600 text-slate-400 font-bold text-[13px]';
                 btnDel.title = 'حذف این شاخه';
                 btnDel.textContent = '✕';
                 btnDel.addEventListener('pointerdown', e => e.stopPropagation());
@@ -2828,8 +2831,11 @@
                     e.stopPropagation();
                     const dx = (e.clientX - dragStartX) / AppState.zoomScale;
                     const dy = (e.clientY - dragStartY) / AppState.zoomScale;
-                    node.x = Math.max(8, Math.min(paperStage.clientWidth - 150, initNodeX + dx));
-                    node.y = Math.max(8, Math.min(paperStage.clientHeight - 60, initNodeY + dy));
+                    // Clamp against the card's own size, not a fixed 150px: a card is now up to
+                    // 330px wide, and clamping to 150 let its right half slide under the layer's
+                    // `overflow: hidden` edge where it could not be seen or grabbed again.
+                    node.x = Math.max(8, Math.min(paperStage.clientWidth - (node.w || 150) - 8, initNodeX + dx));
+                    node.y = Math.max(8, Math.min(paperStage.clientHeight - (node.h || 58) - 8, initNodeY + dy));
                     el.style.left = `${node.x}px`;
                     el.style.top = `${node.y}px`;
                     node.w = el.offsetWidth;
@@ -2951,36 +2957,73 @@
             if (recordUndo) pushUndoState();
 
             const stageW = paperStage.clientWidth || 1450;
-            const rightStartX = stageW - 240;
-            const levelGapX = 235;
-            const leafGapY = 82;
-            let currentY = 44;
 
-            function layoutSubtree(node, depth) {
-                node.x = Math.max(16, rightStartX - depth * levelGapX);
+            // How deep the tree goes decides how much horizontal room each level may take. The
+            // `seen` set is a cycle guard: a corrupt save must never hang the layout.
+            let maxDepth = 0;
+            const seenIds = new Set();
+            const walkDepth = (id, d) => {
+                if (seenIds.has(id)) return;
+                seenIds.add(id);
+                if (d > maxDepth) maxDepth = d;
+                nodes.filter(n => n.parentId === id).forEach(ch => walkDepth(ch.id, d + 1));
+            };
+            nodes.filter(n => !n.parentId).forEach(r => walkDepth(r.id, 0));
 
-                const visibleChildren = node.collapsed
-                    ? []
-                    : nodes.filter(n => n.parentId === node.id);
+            const roots = nodes.filter(n => !n.parentId);
+            const widestCard = () => nodes.reduce((m, n) => Math.max(m, n.w || 170), 170);
 
-                if (visibleChildren.length === 0) {
-                    node.y = currentY;
-                    currentY += Math.max(leafGapY, (node.h || 54) + 24);
-                    return node.y;
-                } else {
+            /**
+             * Places every card, for a given assumed card width. The metrics follow the cards
+             * instead of being hard-coded: a card can now be up to 330px wide (it carries the
+             * user's own handwriting, which has to stay legible), so the old fixed 235px steps
+             * made neighbours overlap and pushed the root card off the right edge of the paper.
+             */
+            const place = (maxW) => {
+                const availW = Math.max(400, stageW - 40);
+                const levelGapX = Math.min(
+                    maxW + 70,
+                    Math.max(200, Math.floor((availW - maxW) / Math.max(1, maxDepth)))
+                );
+                const rightStartX = Math.max(maxW + 20, stageW - maxW - 20);
+                const leafGapY = 82;
+                let currentY = 44;
+
+                const layoutSubtree = (node, depth) => {
+                    node.x = Math.max(16, rightStartX - depth * levelGapX);
+
+                    const visibleChildren = (node.collapsed || depth > 40)
+                        ? []
+                        : nodes.filter(n => n.parentId === node.id);
+
+                    if (visibleChildren.length === 0) {
+                        node.y = currentY;
+                        currentY += Math.max(leafGapY, (node.h || 54) + 24);
+                        return node.y;
+                    }
                     const childYs = visibleChildren.map(ch => layoutSubtree(ch, depth + 1));
                     node.y = (childYs[0] + childYs[childYs.length - 1]) / 2;
                     return node.y;
-                }
-            }
+                };
 
-            const roots = nodes.filter(n => !n.parentId);
-            roots.forEach(r => {
-                layoutSubtree(r, 0);
-                currentY += 42;
-            });
+                roots.forEach(r => {
+                    layoutSubtree(r, 0);
+                    currentY += 42;
+                });
+            };
 
+            const assumedMaxW = widestCard();
+            place(assumedMaxW);
             renderMindMapDOMNodes();
+
+            // The first pass can only guess a card's width — the real one is known only once the
+            // header buttons have been measured. If the cards came out wider than assumed, place
+            // them once more with the real numbers so the tree never overlaps itself.
+            const measuredMaxW = widestCard();
+            if (Math.abs(measuredMaxW - assumedMaxW) > 2) {
+                place(measuredMaxW);
+                renderMindMapDOMNodes();
+            }
 
             // Measure actual bottom of the laid-out Mind-Map Tree and shift any overlapping user handwriting BELOW the tree!
             ensureHandwritingBelowMindMap();
@@ -4962,7 +5005,7 @@
             const h = Math.max(1, inkH || 1);
             return Math.min(
                 Math.max(Math.round(availW * (h / w)), 22),
-                130,
+                200,
                 Math.max(22, Math.round(h * MAX_INK_SCALE))
             );
         }
@@ -5074,7 +5117,10 @@
 
             const baseColorIdx = AppState.mindmapData.nodes.filter(n => !n.parentId).length;
             usable.forEach((block, i) => {
-                const w = 170;
+                // Size the card from the ink itself: the ink canvas is `w - 24` wide, so
+                // `inkW + 24` renders the handwriting at ~1:1 instead of shrinking it to 0.7x.
+                // Clamped, because a card still has to fit in the paper and in the tree.
+                const w = Math.min(330, Math.max(180, Math.round(block.inkW + 24)));
                 // Rough card height for the first layout pass; the real size is measured from
                 // the DOM right after rendering. Same helper as the real canvas, so the first
                 // pass and the final render can never disagree.
@@ -5092,7 +5138,7 @@
                     x: 0,
                     y: 0,
                     w: w,
-                    h: estH + 30,
+                    h: estH + 42,
                     color: MINDMAP_COLORS[(baseColorIdx + i) % MINDMAP_COLORS.length],
                     collapsed: false
                 });
@@ -5927,9 +5973,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 10,
+            version: 11,
             date: '2026-10-16',
-            features: 'robustness pass: save race, undo order, palm rejection'
+            features: 'legible cards + persian-keyboard undo/redo'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -5983,11 +6029,18 @@
         // Undo / Redo & Keyboard Shortcuts
         document.getElementById('btn-undo').addEventListener('click', performUndo);
         document.getElementById('btn-redo').addEventListener('click', performRedo);
+        // Undo / Redo shortcuts. `e.code` (the PHYSICAL key) is used instead of `e.key`, because on
+        // a Persian keyboard layout the Z key reports «ظ» — so Ctrl+Z silently did nothing for
+        // exactly the users this app is written for. Typing inside a field keeps the browser's own
+        // text undo, and Ctrl+Shift+Z is accepted as redo, which is what most apps use.
         window.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+            const t = e.target;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            if (e.code === 'KeyZ') {
                 e.preventDefault();
-                performUndo();
-            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                if (e.shiftKey) performRedo(); else performUndo();
+            } else if (e.code === 'KeyY') {
                 e.preventDefault();
                 performRedo();
             }
