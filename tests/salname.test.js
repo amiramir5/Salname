@@ -40,9 +40,14 @@ function ok(label, condition) {
  * Extract real functions from index.html
  * ------------------------------------------------------------------ */
 function extractFn(src, name) {
-    const marker = '\n        function ' + name + '(';
-    const i = src.indexOf(marker);
-    if (i < 0) throw new Error('function not found in index.html: ' + name);
+    // Top-level functions sit at 8 spaces of indentation, optionally prefixed by `async ` —
+    // loadDayPage and friends are async, so both spellings have to be found.
+    const candidates = [
+        src.indexOf('\n        function ' + name + '('),
+        src.indexOf('\n        async function ' + name + '(')
+    ].filter(x => x >= 0);
+    if (candidates.length === 0) throw new Error('function not found in index.html: ' + name);
+    const i = Math.min(...candidates);
     const start = i + 1;
     // Top-level functions in this file close with a brace at exactly 8 spaces.
     const endMarker = '\n        }';
@@ -442,6 +447,43 @@ ok('an offline AI failure is not blamed on the API key',
     /isOffline\(\)\s*\?/.test(html));
 ok('the topic-tree loader can never get stuck open',
     html.includes('مدل درختی برنگرداند'));
+
+// Robustness pass: each of these was a real defect found by reviewing the AI, drawing and
+// persistence code, and each one is cheap to guard against.
+ok('the debounced save captures the day key when it is scheduled, not when it fires',
+    /pendingSaveKey = AppState\.currentDateKey/.test(extractFn(html, 'scheduleSavePage')));
+ok('leaving a page flushes the pending write first',
+    html.includes('function flushPendingSave') && html.includes('await flushPendingSave()'));
+ok('a day load that lost the race is ignored',
+    /token !== dayLoadToken/.test(extractFn(html, 'loadDayPage')));
+ok('a failed save is reported instead of spinning forever',
+    html.includes("setSaveIndicator('error')") && html.includes('Save failed:'));
+ok('the raw ink is only cleared once the AI produced something',
+    html.includes('const clearSnapInk = () =>') &&
+    /if \(hasTrees \|\| attachedCount > 0\) \{\s*\n\s*clearSnapInk\(\);/.test(html));
+ok('...and it is no longer deleted up front',
+    !/if \(shouldClearInk && snap\.strokeIds\.length > 0\) \{/.test(html));
+ok('the AI buttons cannot be double-tapped into building the tree twice',
+    html.includes('function withAiBusyGuard') && html.includes('aiRequestInFlight'));
+ok('an empty review can no longer rewrite every card',
+    /if \(wrote && n\.text &&/.test(html));
+ok('a review that matches nothing adds a card instead of overwriting the last one',
+    html.includes('اصلاح علمی'));
+ok('structure pictures grow the paper instead of being clipped',
+    html.includes('function ensureStageHeight') && html.includes('ensureStageHeight(y - 24)'));
+ok('the reference/handwriting toggle needs both pictures to exist',
+    html.includes('if (imageObj.webImageUrl && imageObj.dataUrl) {'));
+ok('undo restores the scientific reviews too',
+    html.includes('mindmapReviews: AppState.mindmapData.reviews') &&
+    html.includes('AppState.mindmapData.reviews = snap.mindmapReviews'));
+ok('a no-op flip-all no longer wipes the redo history',
+    /const planned = nodes\.map\(n => flipNodeDirections\(n\)\)/.test(html));
+ok('deleting a card also clears the editing id',
+    /toDelete\.has\(AppState\.editingMindmapNodeId\)/.test(html));
+ok('a palm touch cannot hijack an active pen stroke',
+    html.includes("if (e.pointerType === 'touch' && (Date.now() - AppState.lastStylusActivityTime) < 650) return;"));
+ok('startup failure is surfaced instead of leaving a blank page',
+    html.includes('Startup failed:'));
 
 ok('the prompt forbids adding content outright',
     html.includes('ممنوعیت مطلق افزودن مطلب'));

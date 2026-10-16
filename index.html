@@ -2134,6 +2134,10 @@
                 symbols: AppState.symbols,
                 mindmapNodes: AppState.mindmapData.nodes,
                 mindmapImages: AppState.mindmapData.images || [],
+                // Reviews have to travel with the snapshot too: «جایگزینی با فرمول اصلاحشده»
+                // removes a review entry, and without this Undo restored the node text but left
+                // the review permanently gone.
+                mindmapReviews: AppState.mindmapData.reviews || [],
                 priorities: AppState.priorities,
                 paperType: AppState.paperType
             }));
@@ -2180,6 +2184,9 @@
             if (snap.mindmapImages) {
                 AppState.mindmapData.images = snap.mindmapImages;
             }
+            if (snap.mindmapReviews) {
+                AppState.mindmapData.reviews = snap.mindmapReviews;
+            }
             syncActiveBuffersToStorage();
             AppState.priorities = snap.priorities || ['', '', ''];
             AppState.paperType = snap.paperType || 'lined';
@@ -2193,32 +2200,83 @@
         }
 
         let saveTimeout = null;
+        let pendingSaveKey = null;
+
+        /** The full record written for one day. Shared by the debounced save and the flush. */
+        function buildPagePayload(dateKey) {
+            return {
+                dateKey,
+                strokes: AppState.plannerData.strokes,
+                texts: AppState.plannerData.texts,
+                symbols: AppState.plannerData.symbols,
+                mindmapNodes: AppState.mindmapData.nodes,
+                mindmapReviews: AppState.mindmapData.reviews || [],
+                mindmapImages: AppState.mindmapData.images || [],
+                mindmapStrokes: AppState.mindmapData.strokes,
+                mindmapTexts: AppState.mindmapData.texts,
+                mindmapSymbols: AppState.mindmapData.symbols,
+                priorities: AppState.priorities,
+                paperType: AppState.paperType,
+                pdfDataBase64: AppState.pdfDataBase64,
+                pdfPageNum: AppState.pdfPageNum,
+                updatedAt: Date.now()
+            };
+        }
+
+        function setSaveIndicator(state) {
+            const indicator = document.getElementById('save-indicator');
+            if (!indicator) return;
+            if (state === 'saving') {
+                indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> در حال ذخیره...`;
+            } else if (state === 'error') {
+                indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> ذخیره نشد — یک بار دیگر تلاش کن`;
+            } else {
+                indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ذخیره در IndexedDB`;
+            }
+        }
+
         function scheduleSavePage() {
             syncActiveBuffersToStorage();
             updateMindMapBadge();
-            const indicator = document.getElementById('save-indicator');
-            indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> در حال ذخیره...`;
+            setSaveIndicator('saving');
             clearTimeout(saveTimeout);
+            // The day key is captured NOW. It used to be read when the timer fired, so changing
+            // page inside the 180ms window wrote the page we were leaving under the NEW day's
+            // key — silently overwriting that day's saved notes.
+            pendingSaveKey = AppState.currentDateKey;
+            const dateKey = pendingSaveKey;
             saveTimeout = setTimeout(async () => {
-                await dbEngine.savePage({
-                    dateKey: AppState.currentDateKey,
-                    strokes: AppState.plannerData.strokes,
-                    texts: AppState.plannerData.texts,
-                    symbols: AppState.plannerData.symbols,
-                    mindmapNodes: AppState.mindmapData.nodes,
-                    mindmapReviews: AppState.mindmapData.reviews || [],
-                    mindmapImages: AppState.mindmapData.images || [],
-                    mindmapStrokes: AppState.mindmapData.strokes,
-                    mindmapTexts: AppState.mindmapData.texts,
-                    mindmapSymbols: AppState.mindmapData.symbols,
-                    priorities: AppState.priorities,
-                    paperType: AppState.paperType,
-                    pdfDataBase64: AppState.pdfDataBase64,
-                    pdfPageNum: AppState.pdfPageNum,
-                    updatedAt: Date.now()
-                });
-                indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ذخیره در IndexedDB`;
+                saveTimeout = null;
+                pendingSaveKey = null;
+                try {
+                    await dbEngine.savePage(buildPagePayload(dateKey));
+                    setSaveIndicator('saved');
+                } catch (err) {
+                    // A failed write used to be an unhandled rejection that left the header
+                    // saying «در حال ذخیره...» forever, so the user believed it was saved.
+                    console.error('Save failed:', err);
+                    setSaveIndicator('error');
+                }
             }, 180);
+        }
+
+        /**
+         * Writes any debounced change right now. Called before the buffers are replaced (switching
+         * day or workspace) so the last stroke of the page being left is never lost.
+         */
+        async function flushPendingSave() {
+            if (!saveTimeout || !pendingSaveKey) return;
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+            const dateKey = pendingSaveKey;
+            pendingSaveKey = null;
+            try {
+                await dbEngine.savePage(buildPagePayload(dateKey));
+                setSaveIndicator('saved');
+            } catch (err) {
+                console.error('Flush save failed:', err);
+                setSaveIndicator('error');
+            }
         }
 
         /**
@@ -2523,22 +2581,20 @@
             const nodes = AppState.mindmapData.nodes || [];
             if (nodes.length === 0) return 0;
 
-            pushUndoState();
+            // Work out what would change BEFORE touching the history: pushUndoState() clears the
+            // redo stack, so a no-op flip used to wipe the user's redo history while reporting
+            // that it had done nothing.
+            const planned = nodes.map(n => flipNodeDirections(n));
             let changed = 0;
-            nodes.forEach(n => {
-                const flipped = flipNodeDirections(n);
-                if (flipped !== String(n.text || '').trim()) {
-                    n.text = flipped;
-                    changed++;
-                }
+            nodes.forEach((n, i) => {
+                if (planned[i] !== String(n.text || '').trim()) changed++;
             });
+            if (changed === 0) return 0;
 
-            if (changed === 0) {
-                // Nothing reversible on this page — drop the pointless history entry
-                AppState.undoStack.pop();
-                updateUndoRedoButtons();
-                return 0;
-            }
+            pushUndoState();
+            nodes.forEach((n, i) => {
+                if (planned[i] !== String(n.text || '').trim()) n.text = planned[i];
+            });
 
             renderMindMapDOMNodes();
             renderAllLayers();
@@ -2872,6 +2928,11 @@
             AppState.mindmapData.nodes = AppState.mindmapData.nodes.filter(n => !toDelete.has(n.id));
             if (toDelete.has(AppState.selectedMindmapNodeId)) {
                 AppState.selectedMindmapNodeId = null;
+            }
+            // The node being edited can be one of the deleted ones too; leaving its id behind is
+            // stale state pointing at a node that no longer exists.
+            if (toDelete.has(AppState.editingMindmapNodeId)) {
+                AppState.editingMindmapNodeId = null;
             }
             autoLayoutMindMapTree(false);
         }
@@ -3443,6 +3504,14 @@
                 AppState.lastStylusActivityTime = Date.now();
                 AppState.isTouchPanning = false;
             }
+
+            // PALM REJECTION. A finger or palm landing while the pen is writing must never hijack
+            // the stroke: it used to overwrite activePointerId and restart the point list, so the
+            // handwriting jumped to the palm and then ended early when the palm lifted first.
+            // The Pan/Zoom engine has its own listener and its own identical guard, so returning
+            // here does not break panning or zooming.
+            if (AppState.isDrawing) return;
+            if (e.pointerType === 'touch' && (Date.now() - AppState.lastStylusActivityTime) < 650) return;
 
             // If Stylus Only Mode is ON or Hand Pan tool is active, finger touches are handled by the 4-way Pan/Zoom engine
             if ((AppState.stylusOnly && e.pointerType === 'touch') || AppState.activeTool === 'pan') {
@@ -4555,16 +4624,36 @@
                 btnApply.textContent = '⚡ جایگزینی با فرمول اصلاح‌شده در نمودار';
                 btnApply.addEventListener('click', () => {
                     pushUndoState();
-                    // Find matching node in Mind-Map and update it, or add as a note
+                    // Find the matching node in the Mind-Map and correct it.
+                    const wrote = String(rev.userWrote || '').trim();
                     let updated = false;
                     AppState.mindmapData.nodes.forEach(n => {
-                        if (n.text && (n.text.includes(rev.userWrote) || rev.userWrote.includes(n.text))) {
+                        // `wrote` must be non-empty: '' is a substring of EVERY string, so a review
+                        // whose userWrote came back empty used to rewrite the entire map at once.
+                        if (wrote && n.text && (n.text.includes(wrote) || wrote.includes(n.text))) {
                             n.text = rev.suggestedCorrection;
                             updated = true;
                         }
                     });
-                    if (!updated && AppState.mindmapData.nodes.length > 0) {
-                        AppState.mindmapData.nodes[AppState.mindmapData.nodes.length - 1].text = rev.suggestedCorrection;
+                    if (!updated) {
+                        // Nothing in the tree matched. Adding the corrected formula as its own card
+                        // is safe; the old code overwrote the LAST node, silently corrupting an
+                        // unrelated branch with a formula from a different topic.
+                        const nodes = AppState.mindmapData.nodes;
+                        const root = nodes.find(n => !n.parentId);
+                        nodes.push({
+                            id: uid(),
+                            parentId: root ? root.id : null,
+                            category: 'اصلاح علمی',
+                            text: rev.suggestedCorrection,
+                            x: 0,
+                            y: 0,
+                            w: 155,
+                            h: 52,
+                            color: MINDMAP_COLORS[0],
+                            collapsed: false
+                        });
+                        autoLayoutMindMapTree(false);
                     }
                     AppState.mindmapData.reviews.splice(idx, 1);
                     renderScientificReviewsUI();
@@ -5037,6 +5126,19 @@
         }
 
         /**
+         * Grows the paper so a card parked below the tree is not clipped away. The images layer is
+         * `absolute inset-0 overflow-hidden`, so anything past the stage height was invisible and
+         * impossible to grab. Never shrinks the stage.
+         */
+        function ensureStageHeight(requiredBottom) {
+            const needed = Math.ceil(requiredBottom + 120);
+            if (paperStage.clientHeight < needed) {
+                paperStage.style.height = `${needed}px`;
+                resizeCanvases();
+            }
+        }
+
+        /**
          * Converts Gemini's normalized 0-1000 structure box into source pixel coordinates
          * inside the rendered snapshot. Pure math (no canvas) so it stays unit-testable.
          * NOTE: x is measured from the RIGHT edge, because the handwriting is RTL.
@@ -5206,6 +5308,9 @@
             });
 
             renderMindMapImages();
+            // The images layer is `absolute inset-0 overflow-hidden`, so a picture parked below
+            // the paper was invisible and impossible to grab. Grow the stage to cover it.
+            ensureStageHeight(y - 24);
             scheduleSavePage();
             return cropped.length;
         }
@@ -5272,10 +5377,15 @@
 
                 const refreshCard = () => {
                     labelEl.textContent = `${showingReference ? '🖼' : '✍'} ${imageObj.label || 'ساختار دست‌نویس'}`;
-                    imgEl.src = showingReference ? imageObj.webImageUrl : imageObj.dataUrl;
+                    // Fall back rather than assign an empty src: a crop can fail while a Wikipedia
+                    // reference was still found, and `src = ''` renders a broken image.
+                    imgEl.src = (showingReference && imageObj.webImageUrl)
+                        ? imageObj.webImageUrl
+                        : (imageObj.dataUrl || imageObj.webImageUrl || '');
                 };
 
-                if (imageObj.webImageUrl) {
+                // Only offer the toggle when BOTH pictures really exist.
+                if (imageObj.webImageUrl && imageObj.dataUrl) {
                     const btnToggle = document.createElement('button');
                     btnToggle.className = 'text-slate-400 hover:text-purple-700 font-bold shrink-0 touch-manipulation';
                     btnToggle.textContent = '✍';
@@ -5463,18 +5573,37 @@
                 resultContainer.classList.remove('hidden');
 
                 const shouldClearInk = document.getElementById('chk-ai-clear-ink').checked;
-                if (shouldClearInk && snap.strokeIds.length > 0) {
+                // Only ever run once the AI has actually produced something. Doing it up front (as
+                // this used to) threw the user's handwriting away even when the model came back
+                // with nothing to replace it — opting into "delete raw ink after conversion" then
+                // lost the notes outright.
+                const clearSnapInk = () => {
+                    if (!shouldClearInk || snap.strokeIds.length === 0) return;
                     const idSet = new Set(snap.strokeIds);
                     if (snap.sourceType === 'planner') {
-                        AppState.plannerData.strokes = AppState.plannerData.strokes.filter(s => !idSet.has(s.id));
+                        const kept = AppState.plannerData.strokes.filter(s => !idSet.has(s.id));
+                        AppState.plannerData.strokes = kept;
+                        // In planner mode AppState.strokes is the SAME array, so it has to be
+                        // re-pointed at the filtered copy or the removed ink would still render.
+                        if (AppState.workspaceMode === 'planner') AppState.strokes = kept;
                     } else {
-                        AppState.strokes = AppState.strokes.filter(s => !idSet.has(s.id));
+                        const kept = AppState.strokes.filter(s => !idSet.has(s.id));
+                        AppState.strokes = kept;
+                        if (AppState.workspaceMode === 'mindmap') AppState.mindmapData.strokes = kept;
                     }
                     clearSelection();
-                }
+                };
 
                 if (targetAction === 'tree') {
                     const hasTrees = Array.isArray(parsed.trees) && parsed.trees.length > 0;
+                    const wantsImages = Array.isArray(parsed.structures) && parsed.structures.length > 0;
+
+                    // Switch to the Mind-Map BEFORE anything is added. switchWorkspaceMode resets
+                    // the undo stack, so switching afterwards (as this used to) silently discarded
+                    // the undo entry and left the AI content impossible to revert.
+                    if ((hasTrees || wantsImages) && AppState.workspaceMode !== 'mindmap') {
+                        switchWorkspaceMode('mindmap');
+                    }
 
                     if (hasTrees) {
                         // If the user didn't ask to clear the raw ink, keep their handwriting in the
@@ -5490,7 +5619,7 @@
                     const attachedCount = await attachStructureImages(parsed.structures || [], snap, !hasTrees);
 
                     if (hasTrees || attachedCount > 0) {
-                        if (!hasTrees && AppState.workspaceMode !== 'mindmap') switchWorkspaceMode('mindmap');
+                        clearSnapInk();
                         loadingBox.classList.add('hidden');
                         document.getElementById('modal-ai-gemini').classList.add('hidden');
                     } else {
@@ -5508,6 +5637,7 @@
                         color: AppState.activeColor,
                         rotation: 0
                     });
+                    clearSnapInk();
                     renderAllLayers();
                     scheduleSavePage();
                     loadingBox.classList.add('hidden');
@@ -5599,9 +5729,32 @@
             await saveGeminiKeyToDB(val);
         });
 
-        document.getElementById('btn-ai-handwriting-to-tree').addEventListener('click', () => runGeminiHandwritingAnalysis('tree'));
-        document.getElementById('btn-ai-handwriting-to-text').addEventListener('click', () => runGeminiHandwritingAnalysis('text'));
-        document.getElementById('btn-ai-prompt-to-tree').addEventListener('click', runGeminiPromptToTree);
+        /**
+         * Guards the three AI buttons against a double-tap. A round-trip takes seconds, and a
+         * second run would append the whole tree (or the same structure pictures) a second time.
+         */
+        let aiRequestInFlight = false;
+        function withAiBusyGuard(btnId, fn) {
+            return async (...args) => {
+                if (aiRequestInFlight) return;
+                aiRequestInFlight = true;
+                const btn = document.getElementById(btnId);
+                if (btn) { btn.disabled = true; btn.style.opacity = '0.55'; }
+                try {
+                    return await fn(...args);
+                } finally {
+                    aiRequestInFlight = false;
+                    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+                }
+            };
+        }
+
+        document.getElementById('btn-ai-handwriting-to-tree').addEventListener('click',
+            withAiBusyGuard('btn-ai-handwriting-to-tree', () => runGeminiHandwritingAnalysis('tree')));
+        document.getElementById('btn-ai-handwriting-to-text').addEventListener('click',
+            withAiBusyGuard('btn-ai-handwriting-to-text', () => runGeminiHandwritingAnalysis('text')));
+        document.getElementById('btn-ai-prompt-to-tree').addEventListener('click',
+            withAiBusyGuard('btn-ai-prompt-to-tree', () => runGeminiPromptToTree()));
 
         document.getElementById('btn-copy-ai-text').addEventListener('click', () => {
             const txt = document.getElementById('ai-recognized-text').textContent;
@@ -5774,9 +5927,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 9,
+            version: 10,
             date: '2026-10-16',
-            features: 'dots-join-their-line + no-empty-cards + card-design'
+            features: 'robustness pass: save race, undo order, palm rejection'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -5897,7 +6050,16 @@
          * 15. DAY PAGE LOADER & FULL 10-MONTH JALALI CALENDAR MODAL
          * ============================================================================
          */
+        let dayLoadToken = 0;
         async function loadDayPage(dateKey) {
+            // A newer navigation always wins: prev/next/today/calendar do not await each other, so
+            // without a token the slower IndexedDB read could land last and fill the buffers with
+            // a different day than the header shows.
+            const token = ++dayLoadToken;
+            // Flush the page we are leaving first, or its debounced write lands under the new key.
+            await flushPendingSave();
+            if (token !== dayLoadToken) return;
+
             const dayMeta = ALL_PLANNER_DAYS.find(d => d.key === dateKey) || ALL_PLANNER_DAYS[0];
             AppState.currentDateKey = dayMeta.key;
             AppState.calendarModalMonthIdx = dayMeta.monthIndex;
@@ -5918,6 +6080,7 @@
 
             // Load from IndexedDB
             const saved = await dbEngine.getPage(dayMeta.key);
+            if (token !== dayLoadToken) return;   // a newer day load won; drop this stale result
             AppState.plannerData = {
                 strokes: (saved && saved.strokes) ? saved.strokes : [],
                 texts: (saved && saved.texts) ? saved.texts : [],
@@ -6201,18 +6364,29 @@
          * ============================================================================
          */
         window.addEventListener('DOMContentLoaded', async () => {
-            // Come back in the mode the user left. Otherwise a tree built from handwriting is
-            // still stored but invisible, which reads as "my work is gone".
             try {
-                const savedMode = localStorage.getItem(WORKSPACE_MODE_KEY);
-                if (savedMode === 'mindmap' || savedMode === 'planner') AppState.workspaceMode = savedMode;
-            } catch (_) {}
-            applyWorkspaceModeUI(AppState.workspaceMode);
+                // Come back in the mode the user left. Otherwise a tree built from handwriting is
+                // still stored but invisible, which reads as "my work is gone".
+                try {
+                    const savedMode = localStorage.getItem(WORKSPACE_MODE_KEY);
+                    if (savedMode === 'mindmap' || savedMode === 'planner') AppState.workspaceMode = savedMode;
+                } catch (_) {}
+                applyWorkspaceModeUI(AppState.workspaceMode);
 
-            await dbEngine.init();
-            await loadGeminiKeyFromDB();
-            resizeCanvases();
-            await loadDayPage(AppState.currentDateKey);
+                await dbEngine.init();
+                await loadGeminiKeyFromDB();
+                resizeCanvases();
+                await loadDayPage(AppState.currentDateKey);
+            } catch (err) {
+                // IndexedDB can be blocked (private mode, storage pressure, a corrupt database).
+                // Without this the page stayed blank with nothing but a console error.
+                console.error('Startup failed:', err);
+                setSaveIndicator('error');
+                const stamp = document.getElementById('app-build-stamp');
+                if (stamp) {
+                    stamp.textContent = 'راه‌اندازی حافظهٔ مرورگر ناموفق بود. اگر در حالت ناشناس (Incognito) هستی یا حافظه پر شده، این پیام را می‌بینی.';
+                }
+            }
         });
 
         /**
