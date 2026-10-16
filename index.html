@@ -222,9 +222,9 @@
             background: rgba(255, 255, 255, 0.96);
             border: 1.5px solid #CBD5E1;
             border-right: 4px solid #2563EB;
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 6px 9px;
-            box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
             cursor: grab;
             user-select: none;
             z-index: 25;
@@ -2326,7 +2326,9 @@
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
 
-            // UNIFIED BRANCHING LINES (/ and \) FOR ALL LEVELS (Root AND Sub-branches)
+            // Smooth S-curves from a single fork point on the parent, instead of straight
+            // diagonals: the tree reads as a tree rather than a spider web, and two children
+            // of the same parent no longer look like one long line crossing the fork.
             nodes.forEach(parent => {
                 if (!isMindMapNodeVisible(parent, nodes) || parent.collapsed) return;
                 const children = nodes.filter(c => c.parentId === parent.id && isMindMapNodeVisible(c, nodes));
@@ -2335,29 +2337,42 @@
                 const forkOriginX = parent.x - 4;
                 const forkOriginY = parent.y + (parent.h || 48) / 2;
                 const parentColor = parent.color || '#2563EB';
+                const isRootLevel = !parent.parentId;
 
-                // Small anchor circle on left edge of parent
-                ctx.fillStyle = parentColor;
+                // Anchor on the parent: a white core inside a coloured ring.
+                ctx.fillStyle = '#FFFFFF';
                 ctx.beginPath();
-                ctx.arc(forkOriginX, forkOriginY, 3, 0, Math.PI * 2);
+                ctx.arc(forkOriginX, forkOriginY, 4, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.strokeStyle = parentColor;
+                ctx.lineWidth = isRootLevel ? 2.4 : 2;
+                ctx.beginPath();
+                ctx.arc(forkOriginX, forkOriginY, 4, 0, Math.PI * 2);
+                ctx.stroke();
 
                 children.forEach(ch => {
                     const childRightX = ch.x + (ch.w || 150) + 4;
                     const childCenterY = ch.y + (ch.h || 48) / 2;
                     const branchColor = ch.color || parentColor;
+                    // How far the curve travels sideways before it bends. Capped so a short
+                    // branch and a long one bend by a similar amount.
+                    const bend = Math.max(26, Math.min(70, Math.abs(forkOriginX - childRightX) * 0.5));
 
                     ctx.strokeStyle = branchColor;
-                    ctx.lineWidth = !parent.parentId ? 2.6 : 2.1;
+                    ctx.lineWidth = isRootLevel ? 2.8 : 2.2;
                     ctx.beginPath();
                     ctx.moveTo(forkOriginX, forkOriginY);
-                    ctx.lineTo(childRightX, childCenterY);
+                    ctx.bezierCurveTo(
+                        forkOriginX - bend, forkOriginY,
+                        childRightX + bend, childCenterY,
+                        childRightX, childCenterY
+                    );
                     ctx.stroke();
 
-                    // Node dot at child tip
+                    // Tip dot where the branch meets its card.
                     ctx.fillStyle = branchColor;
                     ctx.beginPath();
-                    ctx.arc(childRightX, childCenterY, 3, 0, Math.PI * 2);
+                    ctx.arc(childRightX, childCenterY, 3.2, 0, Math.PI * 2);
                     ctx.fill();
                 });
             });
@@ -4662,7 +4677,16 @@
          * how the notes are laid out on the page.
          */
 
-        /** Groups raw strokes into readable blocks: lines first, then wide horizontal gaps. */
+        /**
+         * Groups raw strokes into the blocks a human would call "one item of writing".
+         *
+         * Two facts drive this for Persian handwriting: the dots of پ/ت/چ/ج/ق/ی are separate
+         * strokes even though they belong to a letter, and the space between two words is far
+         * smaller than the empty area between two separate notes. So lines are built from the
+         * letter bodies only, every dot is then pulled into the nearest line, and a line is
+         * only ever split where a really wide empty area proves a new item — never at a word
+         * gap, which is what used to explode one written line into a dozen cards.
+         */
         function groupStrokesIntoBlocks(strokes) {
             const boxes = [];
             strokes.forEach(s => {
@@ -4681,14 +4705,22 @@
             });
             if (boxes.length === 0) return [];
 
-            // Thresholds adapt to the real size of this person's handwriting.
-            const heights = boxes.map(b => b.h).sort((a, b) => a - b);
-            const medH = heights[Math.floor(heights.length / 2)] || 18;
-            const lineTol = Math.max(9, medH * 0.6);
+            // Size reference: the median stroke, and the taller "real letter" strokes.
+            const sortedH = boxes.map(b => b.h).sort((a, b) => a - b);
+            const medH = sortedH[Math.floor(sortedH.length / 2)] || 18;
+            const tallH = sortedH[Math.floor(sortedH.length * 0.75)] || medH;
+            const dotMaxH = Math.max(medH * 0.55, tallH * 0.35);
+            const isDot = b => b.h <= dotMaxH;
 
-            // 1. Strokes that sit on the same visual line
+            let bodyBoxes = boxes.filter(b => !isDot(b));
+            if (bodyBoxes.length === 0) bodyBoxes = boxes.slice();   // a page of nothing but small strokes
+            const bodySet = new Set(bodyBoxes);
+
+            // 1. Lines are built from letter bodies, so a floating dot can never become a line
+            //    of its own — which is exactly how it used to turn into an extra card.
+            const lineTol = Math.max(12, tallH * 0.75);
             const lines = [];
-            boxes.slice().sort((a, b) => a.cy - b.cy).forEach(b => {
+            bodyBoxes.slice().sort((a, b) => a.cy - b.cy).forEach(b => {
                 let line = lines.find(L => Math.abs(L.cy - b.cy) <= lineTol);
                 if (!line) {
                     line = { cy: b.cy, members: [] };
@@ -4698,9 +4730,20 @@
                 line.cy = line.members.reduce((sum, m) => sum + m.cy, 0) / line.members.length;
             });
 
-            // 2. Split each line where the pen left a wide gap. Persian reads right-to-left,
-            //    so the strokes of a line are walked from the right edge leftwards.
-            const gapTol = Math.max(18, medH * 1.7);
+            // 2. Every dot joins the line it sits closest to, so it stays part of its own word.
+            boxes.forEach(b => {
+                if (bodySet.has(b)) return;
+                let best = lines[0], bestD = Infinity;
+                lines.forEach(L => {
+                    const d = Math.abs(L.cy - b.cy);
+                    if (d < bestD) { bestD = d; best = L; }
+                });
+                best.members.push(b);
+            });
+
+            // 3. Inside a line only a really wide empty area starts a new item. Persian reads
+            //    right-to-left, so the strokes of a line are walked from the right edge leftwards.
+            const gapTol = Math.max(85, tallH * 2.2);
             const blocks = [];
             lines.forEach(line => {
                 line.members.sort((a, b) => b.cx - a.cx);
@@ -5605,9 +5648,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 7,
+            version: 8,
             date: '2026-10-16',
-            features: 'handwriting-tree + no-invented-content'
+            features: 'line-grouping + curved-branches'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');

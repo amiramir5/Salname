@@ -315,6 +315,9 @@ const hwStroke = (id, x, y, len = 30) => ({
     points: [{ x, y }, { x: x + len, y: y + 10 }]
 });
 
+// A single dot of a letter (پ, ت, ق ...): its own stroke, but never its own card.
+const hwDot = (id, x, y) => ({ id, size: 4, points: [{ x, y }, { x: x + 1, y: y + 1 }] });
+
 check('no strokes means no blocks', groupStrokesIntoBlocks([]), []);
 
 check('two far-apart lines become two blocks',
@@ -324,8 +327,20 @@ const oneLine = groupStrokesIntoBlocks([hwStroke('a', 100, 100), hwStroke('b', 1
 check('two close strokes on one line become one block', oneLine.length, 1);
 check('...and that block keeps both strokes', oneLine[0].strokes.length, 2);
 
+// The whole point of the grouping rewrite: ordinary word spacing is NOT a boundary.
+const twoWords = groupStrokesIntoBlocks([hwStroke('w1', 100, 100, 60), hwStroke('w2', 180, 100, 60)]);
+check('the space between two words does not split the card', twoWords.length, 1);
+
+// Dots float above and below the letters, so they used to become their own lines.
+const dotAndWord = groupStrokesIntoBlocks([hwStroke('word', 100, 100, 60), hwDot('dot', 130, 80)]);
+check('a floating dot joins its word instead of becoming a card', dotAndWord.length, 1);
+check('...and the word keeps both of its strokes', dotAndWord[0].strokes.length, 2);
+
+const onlyDots = groupStrokesIntoBlocks([hwDot('d1', 100, 100), hwDot('d2', 120, 104)]);
+check('a page of nothing but dots still yields a card', onlyDots.length, 1);
+
 const gapped = groupStrokesIntoBlocks([hwStroke('left', 100, 100), hwStroke('right', 500, 100)]);
-check('a wide gap splits the line into two blocks', gapped.length, 2);
+check('a really wide empty area still splits the line', gapped.length, 2);
 check('Persian reading order: the right-most block comes first', gapped[0].strokes[0].id, 'right');
 
 const hwBlock = (x1) => ({ x0: x1 - 200, x1, y0: 0, y1: 10, strokes: [] });
@@ -349,6 +364,8 @@ ok('cards render the preserved ink', html.includes('buildMindMapInkCanvas(node)'
 ok('the ink canvas has its own style', /\.mindmap-node-ink\s*\{/.test(html));
 ok('the ink canvas escapes the global `canvas { position: absolute }` rule',
     /\.mindmap-node-ink\s*\{[\s\S]*?position:\s*static/.test(html));
+ok('branches are drawn as smooth curves, not straight diagonals',
+    /bezierCurveTo/.test(extractFn(html, 'drawMindMapConnectors')));
 ok('the builder never touches the network',
     !/fetch\(|callGeminiAPI/.test(extractFn(html, 'buildMindMapFromHandwriting')));
 ok('the builder never reads text out of the ink',
