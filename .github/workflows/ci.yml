@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Everything is vendored and dependency-free, so there is nothing to install.
+      - name: Run the test suite
+        run: node tests/salname.test.js
+
+      - name: Check the service worker syntax
+        run: node --check sw.js
+
+      # Guards against the Tailwind build drifting away from the classes actually used.
+      - name: Rebuild Tailwind and fail if assets/tailwind.css is stale
+        run: |
+          npm run build:css
+          if ! git diff --quiet -- assets/tailwind.css; then
+            echo "::error::assets/tailwind.css is out of date. Run 'npm run build:css' and commit the result."
+            git diff --stat -- assets/tailwind.css
+            exit 1
+          fi

@@ -1,0 +1,11 @@
+# Keep the repository byte-identical on every machine and in CI.
+# The blobs are already stored as LF, so declaring it here just stops Git from
+# rewriting working copies and keeps the Tailwind rebuild check in CI stable.
+* text=auto eol=lf
+
+*.png  binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.ico binary
+*.pdf binary

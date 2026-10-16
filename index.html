@@ -4,13 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>سالنامه هوشمند و نوت‌برداری دیجیتال (۱۴۰۵ - ۱۴۰۶)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
-    <!-- PDF.js via Cloudflare CDN (Unblocked & Fast in Iran) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <!-- KaTeX via Cloudflare CDN for Word/LaTeX-grade Formula Rendering -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <!--
+      All third-party assets are vendored locally under assets/ so the app works with
+      no internet connection at all, and can never be broken by a blocked or slow CDN.
+      tailwind.css is a static build (see tailwind.config.js — rebuild instructions there).
+    -->
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/fonts/vazirmatn/vazirmatn.css">
+    <link rel="stylesheet" href="assets/katex/katex.min.css">
+    <!-- PDF.js for importing PDF pages -->
+    <script src="assets/pdfjs/pdf.min.js"></script>
+    <!-- KaTeX for Word/LaTeX-grade formula rendering -->
+    <script src="assets/katex/katex.min.js"></script>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#0F172A">
+    <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
     <style>
         :root {
             --bg-app: #F8FAFC;
@@ -1065,6 +1074,35 @@
     <script>
         /**
          * ============================================================================
+         * SALNAME — TABLE OF CONTENTS
+         * ============================================================================
+         * One single-file app: the markup, the CSS and all the logic live in this
+         * document. Jump to any section by searching for its number, e.g. "10. VECTOR
+         * ERASER". Section banners look like  *  7. MULTI-LAYER VECTOR ...
+         *
+         *   <head>  local asset links (Tailwind build, fonts, KaTeX, PDF.js) + manifest
+         *    1.  Persian numeral converter & word/LaTeX math/chemistry formula engine
+         *    2.  Exact Jalali calendar engine (1 Mehr 1405 → 31 Tir 1406)
+         *    3.  IndexedDB persistence engine (no localStorage)
+         *    4.  Mathematical ink beautifier & streamline engine
+         *    5.  Vector productivity symbols renderer
+         *    6.  Application state & vector workspace controller
+         *    7.  Multi-layer vector rendering pipeline (+ unified branching tree)
+         *    8.  Universal lasso selection & transform engine
+         *    9.  High-frame-rate pointer events, stylus barrel eraser & zero-lag engine
+         *   10.  Vector eraser (whole stroke & partial segment splitting)
+         *   11.  Lasso selection transformations (move, scale, rotate, recolor)
+         *   12.  Floating text editor controller
+         *   13.  Gemini handwriting vision, formula OCR & fact-checker
+         *   14.  Toolbar, popovers, calendar drawer & page navigation controllers
+         *   15.  Day page loader & full 10-month Jalali calendar modal
+         *   16.  Cross-device backup / restore & high-DPI PNG export
+         *   17.  Application bootstrap
+         *   18.  Offline support (service worker registration)
+         * ============================================================================
+         */
+        /**
+         * ============================================================================
          * 1. PERSIAN NUMERAL CONVERTER & WORD/LATEX MATH/CHEMISTRY FORMULA ENGINE
          * ============================================================================
          */
@@ -1972,7 +2010,7 @@
          * PDF Annotator Engine (Render PDF Page onto Layer 0 Canvas)
          */
         if (window.pdfjsLib) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/pdfjs/pdf.worker.min.js';
         }
 
         async function loadPdfFromBase64(base64Data, pageNum = 1) {
@@ -5249,9 +5287,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 4,
+            version: 5,
             date: '2026-10-16',
-            features: 'formula-bidi-fix + wider-crop + wikipedia-image + empty-mindmap'
+            features: 'offline-pwa + local-assets + tests + docs'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -5654,6 +5692,22 @@
             resizeCanvases();
             await loadDayPage(AppState.currentDateKey);
         });
+
+        /**
+         * ============================================================================
+         * 18. OFFLINE SUPPORT (SERVICE WORKER)
+         * ============================================================================
+         * Every third-party file is vendored under assets/, and sw.js caches all of it,
+         * so the app keeps working with no internet at all and can be installed to the
+         * home screen like a native app.
+         */
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(() => {
+                    /* offline support is a bonus — never let it break the app */
+                });
+            });
+        }
     </script>
 </body>
 </html>

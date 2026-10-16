@@ -1,0 +1,11 @@
+{
+  "name": "salname",
+  "version": "1.0.0",
+  "private": true,
+  "description": "سالنامه هوشمند و نوت‌برداری دیجیتال — Jalali smart planner, digital notebook and mind-map with AI handwriting recognition.",
+  "scripts": {
+    "test": "node tests/salname.test.js",
+    "build:css": "npx --yes tailwindcss@3.4.17 -c tailwind.config.js -i tailwind.input.css -o assets/tailwind.css --minify",
+    "serve": "node tools/dev-server.js"
+  }
+}

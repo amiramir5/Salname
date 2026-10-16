@@ -1,0 +1,8 @@
+# No dependencies are needed to run or test the app, but ignore them if installed.
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp

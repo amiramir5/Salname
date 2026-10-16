@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="سالنامه">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1E293B"/>
+      <stop offset="1" stop-color="#0B1220"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="146" y="86" width="28" height="70" rx="14" fill="#0F172A"/>
+  <rect x="338" y="86" width="28" height="70" rx="14" fill="#0F172A"/>
+  <rect x="96" y="120" width="320" height="300" rx="36" fill="#FDFBF7"/>
+  <path d="M96 156a36 36 0 0 1 36-36h248a36 36 0 0 1 36 36v42H96z" fill="#2563EB"/>
+  <rect x="140" y="230" width="230" height="22" rx="11" fill="#CBD5E1"/>
+  <rect x="140" y="282" width="190" height="22" rx="11" fill="#2563EB"/>
+  <rect x="140" y="334" width="150" height="22" rx="11" fill="#CBD5E1"/>
+</svg>
