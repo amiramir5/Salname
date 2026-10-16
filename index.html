@@ -265,6 +265,17 @@
             cursor: text;
         }
 
+        /* Handwriting kept AS handwriting inside a Mind-Map card — never turned into text */
+        .mindmap-node-ink {
+            /* The global `canvas { position: absolute }` rule exists for the full-page
+               drawing layers; inside a card it would pin the ink over the header. */
+            position: static;
+            display: block;
+            pointer-events: none;
+            border-radius: 6px;
+            background: #FFFFFF;
+        }
+
         /* Built-in Stacked Fraction & Chemistry Formula Styling (Works even offline) */
         .math-frac {
             display: inline-flex;
@@ -624,6 +635,10 @@
             <button id="btn-mm-add-root" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-semibold flex items-center gap-1 shrink-0 shadow-sm transition">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 <span>+ مبحث اصلی جدید</span>
+            </button>
+            <button id="btn-mm-from-ink" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-md text-[11px] font-semibold flex items-center gap-1 shrink-0 shadow-sm transition" title="نوشته‌های همین صفحه را بدون هیچ هوش مصنوعی و بدون تبدیل به متن، به‌شکل نمودار درختی می‌چیند. خودِ دست‌خط شما داخل کارت‌ها می‌ماند و نوشته‌ها روی برگه هم دست‌نخورده باقی می‌مانند.">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.3"></circle><circle cx="18" cy="12" r="2.3"></circle><circle cx="6" cy="18" r="2.3"></circle><path d="M8.3 6h4.4a2 2 0 0 1 2 2v2"></path><path d="M8.3 18h4.4a2 2 0 0 0 2-2v-2"></path></svg>
+                <span>ساخت درخت از دست‌خط خودم (بدون AI)</span>
             </button>
             <button id="btn-mm-add-child" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[11px] font-medium flex items-center gap-1 shrink-0 transition" title="افزودن زیرشاخه خطی به مورد انتخاب‌شده">
                 <span>+ زیرشاخه ( ╱ ╲ )</span>
@@ -2682,17 +2697,23 @@
                     el.appendChild(input);
                     setTimeout(() => input.focus(), 20);
                 } else {
-                    // Rich Word/LaTeX Formula Display View (Click or Double-click to edit)
-                    const richDiv = document.createElement('div');
-                    richDiv.className = 'mindmap-node-rich';
-                    richDiv.innerHTML = renderFormattedMathAndChem(node.text || 'عنوان...');
-                    richDiv.title = 'برای ویرایش متن یا فرمول دو بار کلیک کنید یا دکمه ✎ را بزنید';
-                    richDiv.addEventListener('dblclick', (e) => {
-                        e.stopPropagation();
-                        AppState.editingMindmapNodeId = node.id;
-                        renderMindMapDOMNodes();
-                    });
-                    el.appendChild(richDiv);
+                    // Handwriting cards keep the user's REAL ink — no OCR, no typed text.
+                    const hasInk = Array.isArray(node.inkStrokes) && node.inkStrokes.length > 0;
+                    if (hasInk) el.appendChild(buildMindMapInkCanvas(node));
+
+                    // A caption is optional and only appears when there really is text.
+                    if (!hasInk || (node.text || '').trim()) {
+                        const richDiv = document.createElement('div');
+                        richDiv.className = 'mindmap-node-rich';
+                        richDiv.innerHTML = renderFormattedMathAndChem(node.text || 'عنوان...');
+                        richDiv.title = 'برای ویرایش متن یا فرمول دو بار کلیک کنید یا دکمه ✎ را بزنید';
+                        richDiv.addEventListener('dblclick', (e) => {
+                            e.stopPropagation();
+                            AppState.editingMindmapNodeId = node.id;
+                            renderMindMapDOMNodes();
+                        });
+                        el.appendChild(richDiv);
+                    }
                 }
 
                 // Pointer Dragging for Node Repositioning (Accounting for Zoom Scale)
@@ -4364,19 +4385,19 @@
                 },
                 trees: {
                     type: "ARRAY",
-                    description: "ساختار درختی مرتب‌شده، بدون تکرار و دسته‌بندی‌شده مباحث همراه با رنگ موضوعی برای هر شاخه",
+                    description: "درخت‌وارهٔ مطلب‌هایی که کاربر واقعاً در تصویر نوشته است. هیچ مطلب تازه‌ای اضافه نکن؛ تعداد و متن شاخه‌ها باید دقیقاً برگردان همان دست‌خط باشد.",
                     items: {
                         type: "OBJECT",
                         properties: {
-                            title: { type: "STRING", description: "عنوان اصلی مبحث یا درس" },
+                            title: { type: "STRING", description: "عنوان همان مبحثی که کاربر نوشته است (بدون افزودن هیچ مطلب تازه)" },
                             colorHex: { type: "STRING", description: "کد رنگ هگز مناسب موضوع از بین #2563EB, #059669, #7C3AED, #D97706, #E11D48, #0891B2" },
                             branches: {
                                 type: "ARRAY",
                                 items: {
                                     type: "OBJECT",
                                     properties: {
-                                        categoryLabel: { type: "STRING", description: "برچسب کوتاه نوع شاخه (مثلاً: فرمول محاسباتی، واکنش، نکته، طبقه‌بندی)" },
-                                        title: { type: "STRING", description: "متن یا فرمول شاخه اصلی (کسرها با \\frac{صورت}{مخرج} و زیروند شیمی با _{عدد})" },
+                                        categoryLabel: { type: "STRING", description: "برچسب کوتاه نوع شاخه، فقط اگر کاربر خودش چنین دسته‌بندی‌ای را نوشته باشد؛ وگرنه رشتهٔ خالی بگذار و این فیلد را از خودت پر نکن." },
+                                        title: { type: "STRING", description: "دقیقاً همان متن یا فرمولی که کاربر در دست‌خط نوشته (کسرها با \\frac{صورت}{مخرج} و زیروند شیمی با _{عدد})" },
                                         colorHex: { type: "STRING", description: "کد رنگ متمایز برای این شاخه (#2563EB آبی فرمول، #059669 سبز واکنش، #7C3AED بنفش مفهوم، #D97706 نارنجی نکته، #E11D48 قرمز هشدار)" },
                                         placement: {
                                             type: "OBJECT",
@@ -4394,7 +4415,7 @@
                                             items: { type: "STRING", description: "متن یا فرمول کامل زیرشاخه بدون حذف هیچ بخش از دست‌خط" }
                                         }
                                     },
-                                    required: ["categoryLabel", "title", "colorHex", "subBranches"]
+                                    required: ["title", "colorHex", "subBranches"]
                                 }
                             }
                         },
@@ -4629,6 +4650,209 @@
                 switchWorkspaceMode('mindmap');
             }
             autoLayoutMindMapTree(false);
+        }
+
+        /**
+         * ============================================================================
+         * 12.7 HANDWRITING → TREE (no AI, no OCR — your own ink becomes the nodes)
+         * ============================================================================
+         * The AI path can only ever produce typed text, and it decides the structure on
+         * its own. This path is the opposite: it never reads a single letter, keeps the
+         * user's real strokes as the card contents, and derives the hierarchy purely from
+         * how the notes are laid out on the page.
+         */
+
+        /** Groups raw strokes into readable blocks: lines first, then wide horizontal gaps. */
+        function groupStrokesIntoBlocks(strokes) {
+            const boxes = [];
+            strokes.forEach(s => {
+                const pts = s.points || [];
+                if (pts.length === 0) return;
+                let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+                pts.forEach(p => {
+                    if (p.x < x0) x0 = p.x;
+                    if (p.y < y0) y0 = p.y;
+                    if (p.x > x1) x1 = p.x;
+                    if (p.y > y1) y1 = p.y;
+                });
+                const pad = (s.size || 3) / 2 + 1;
+                x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+                boxes.push({ stroke: s, x0, y0, x1, y1, cy: (y0 + y1) / 2, cx: (x0 + x1) / 2, h: y1 - y0 });
+            });
+            if (boxes.length === 0) return [];
+
+            // Thresholds adapt to the real size of this person's handwriting.
+            const heights = boxes.map(b => b.h).sort((a, b) => a - b);
+            const medH = heights[Math.floor(heights.length / 2)] || 18;
+            const lineTol = Math.max(9, medH * 0.6);
+
+            // 1. Strokes that sit on the same visual line
+            const lines = [];
+            boxes.slice().sort((a, b) => a.cy - b.cy).forEach(b => {
+                let line = lines.find(L => Math.abs(L.cy - b.cy) <= lineTol);
+                if (!line) {
+                    line = { cy: b.cy, members: [] };
+                    lines.push(line);
+                }
+                line.members.push(b);
+                line.cy = line.members.reduce((sum, m) => sum + m.cy, 0) / line.members.length;
+            });
+
+            // 2. Split each line where the pen left a wide gap. Persian reads right-to-left,
+            //    so the strokes of a line are walked from the right edge leftwards.
+            const gapTol = Math.max(18, medH * 1.7);
+            const blocks = [];
+            lines.forEach(line => {
+                line.members.sort((a, b) => b.cx - a.cx);
+                let current = null;
+                line.members.forEach(b => {
+                    if (current && (current.x0 - b.x1) <= gapTol) {
+                        current.x0 = Math.min(current.x0, b.x0);
+                        current.y0 = Math.min(current.y0, b.y0);
+                        current.x1 = Math.max(current.x1, b.x1);
+                        current.y1 = Math.max(current.y1, b.y1);
+                        current.strokes.push(b.stroke);
+                    } else {
+                        current = { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, strokes: [b.stroke] };
+                        blocks.push(current);
+                    }
+                });
+            });
+            return blocks;
+        }
+
+        /**
+         * Nests the blocks into a tree using indentation, the way a hand-written outline
+         * reads: notes start at the right edge, so a block whose right edge sits further
+         * left than the block above it is treated as its child. If nothing is indented at
+         * all, the first block simply becomes the root — the result is still a tree, and
+         * every card can be dragged or re-parented afterwards.
+         */
+        function assignHandwritingParents(blocks) {
+            const INDENT_TOL = 18;
+            const stack = [];
+            blocks.forEach(block => {
+                block.id = uid();
+                while (stack.length && stack[stack.length - 1].x1 < block.x1 + INDENT_TOL) stack.pop();
+                block.parentId = stack.length ? stack[stack.length - 1].id : null;
+                stack.push(block);
+            });
+
+            if (blocks.length > 1 && blocks.every(b => !b.parentId)) {
+                for (let i = 1; i < blocks.length; i++) blocks[i].parentId = blocks[0].id;
+            }
+            return blocks;
+        }
+
+        /**
+         * Renders one card's preserved handwriting. The strokes are stored relative to the
+         * block origin, so they only need scaling to fit the card — they stay vector, and
+         * therefore stay sharp at any size.
+         */
+        function buildMindMapInkCanvas(node) {
+            const availW = Math.max(40, (node.w || 150) - 24);   // card padding + borders
+            const inkW = Math.max(1, node.inkW || 1);
+            const inkH = Math.max(1, node.inkH || 1);
+
+            // Height comes from the ink's own aspect ratio at the card's real width, so a
+            // tall block gets a tall card and a single line stays a thin strip. Deriving it
+            // from the card height instead would fight the measured header height.
+            const availH = Math.min(Math.max(Math.round(availW * (inkH / inkW)), 22), 130);
+
+            const cv = document.createElement('canvas');
+            cv.className = 'mindmap-node-ink';
+            cv.width = Math.round(availW * dpr);
+            cv.height = Math.round(availH * dpr);
+            cv.style.width = availW + 'px';
+            cv.style.height = availH + 'px';
+
+            const g = cv.getContext('2d');
+            g.setTransform(dpr, 0, 0, dpr, 0, 0);
+            g.clearRect(0, 0, availW, availH);
+
+            const scale = Math.min(availW / inkW, availH / inkH);
+            g.translate((availW - inkW * scale) / 2, (availH - inkH * scale) / 2);
+            g.scale(scale, scale);
+
+            (node.inkStrokes || []).forEach(s => {
+                if (s.tool === 'highlighter') {
+                    g.globalAlpha = 0.45;
+                    InkBeautifier.renderSmoothStroke(g, s);
+                    g.globalAlpha = 1;
+                } else {
+                    InkBeautifier.renderSmoothStroke(g, s);
+                }
+            });
+            return cv;
+        }
+
+        /**
+         * Turns the handwriting already on this page into Mind-Map cards — no AI, no OCR,
+         * nothing read and nothing invented.
+         *
+         * Nothing is deleted: the notes stay exactly where they were written. Strokes that
+         * are already inside a card are skipped, so pressing the button twice cannot
+         * duplicate the tree. Returns the number of cards created.
+         */
+        function buildMindMapFromHandwriting() {
+            const usedIds = new Set();
+            (AppState.mindmapData.nodes || []).forEach(n => {
+                (n.inkStrokes || []).forEach(s => usedIds.add(s.id));
+            });
+
+            // "The writing on this page" — same source rule as the AI snapshot.
+            let sourceStrokes = (AppState.strokes || []).filter(s => !usedIds.has(s.id));
+            if (sourceStrokes.length === 0 && AppState.workspaceMode === 'mindmap') {
+                sourceStrokes = (AppState.plannerData.strokes || []).filter(s => !usedIds.has(s.id));
+            }
+            if (sourceStrokes.length === 0) return 0;
+
+            const blocks = groupStrokesIntoBlocks(sourceStrokes);
+            if (blocks.length === 0) return 0;
+
+            if (AppState.workspaceMode !== 'mindmap') switchWorkspaceMode('mindmap');
+            pushUndoState();
+
+            assignHandwritingParents(blocks);
+
+            const baseColorIdx = AppState.mindmapData.nodes.filter(n => !n.parentId).length;
+            blocks.forEach((block, i) => {
+                const inkW = Math.max(1, block.x1 - block.x0);
+                const inkH = Math.max(1, block.y1 - block.y0);
+                const w = 170;
+                // Rough card height for the first layout pass; the real size is measured
+                // from the DOM right after rendering.
+                const estH = Math.min(Math.max(Math.round((w - 24) * (inkH / inkW)), 22), 130);
+                const h = estH + 30;
+
+                AppState.mindmapData.nodes.push({
+                    id: block.id,
+                    parentId: block.parentId,
+                    category: block.parentId ? 'دستخط' : 'مبحث اصلی',
+                    text: '',
+                    // Real ink, stored relative to the block origin so the card can scale it.
+                    inkStrokes: block.strokes.map(s => {
+                        const copy = JSON.parse(JSON.stringify(s));
+                        copy.points = s.points.map(p => ({ x: p.x - block.x0, y: p.y - block.y0, p: p.p }));
+                        return copy;
+                    }),
+                    inkW: inkW,
+                    inkH: inkH,
+                    x: 0,
+                    y: 0,
+                    w: w,
+                    h: h,
+                    color: MINDMAP_COLORS[(baseColorIdx + i) % MINDMAP_COLORS.length],
+                    collapsed: false
+                });
+            });
+
+            autoLayoutMindMapTree(false);
+            // A card's width is decided by its header buttons, which is only known after
+            // layout. Re-render once so the ink fills the real card width instead of the
+            // nominal one — the strokes are vector, so this stays perfectly sharp.
+            renderMindMapDOMNodes();
+            return blocks.length;
         }
 
         /**
@@ -5018,6 +5242,7 @@
                 const systemPrompt = [
                     "تو یک طراح ارشد کنکور سراسری ایران (مسلط به خط‌به‌خط کتاب‌های درسی شیمی، زیست‌شناسی، فیزیک و ریاضی دهم، یازدهم و دوازدهم نظام جدید ایران) و متخصص OCR دست‌خط فارسی هستی.",
                     "قوانین حیاتی و غیرقابل تغییر که باید ۱۰۰٪ اجرا کنی:",
+                    "۰. ممنوعیت مطلق افزودن مطلب (مهم‌تر از هر قانون دیگر): تو فقط «خوانندهٔ خط» هستی، نه مؤلف. هیچ مبحث، نکته، مثال، تعریف، عنوان دسته‌بندی یا توضیحی که در تصویر نیست از خودت اضافه نکن. تعداد و متن شاخه‌ها باید دقیقاً به اندازهٔ مطلب‌هایی باشد که کاربر واقعاً روی کاغذ نوشته است — نه یکی بیشتر. اگر چیزی در تصویر نیست، برایش شاخه، عنوان یا برچسب نساز و هیچ مطلبی «برای کامل‌تر شدن درخت» اضافه نکن.",
                     "۱. وفاداری مطلق به دست‌خط: تمام کلمات، صورت و مخرج کسرها، ضرایب و زیروندها را بدون جا انداختن حتی یک نماد استخراج کن.",
                     "۲. قانون طلایی موقعیت مکانی (مهم‌ترین قانون): وظیفه تو فقط «گزارش موقعیت مکانی» است؛ ترتیب نهایی راست‌به‌چپ را خودِ برنامه می‌چیند. پس هرگز خودت ترتیب دو طرف منها یا مساوی را در رشته نهایی حدس نزن.",
                     "   - هر جا در دست‌خط دو عملوند با یک عملگر وسطشان نوشته شده (مثل «A − B» یا «A = B») و ترتیب اهمیت دارد، آن دو را در فیلد ساختاری «placement» بنویس، نه در رشتهٔ آزاد title.",
@@ -5037,7 +5262,9 @@
                     "   - مثال: اگر ساختار لوییس در گوشهٔ بالا-راست تصویر باشد، box = { xmin: 30, ymin: 40, xmax: 420, ymax: 380 }. اگر هیچ ساختار دوبعدی در تصویر نیست، structures را آرایهٔ خالی [] بگذار.",
                     "۵. بررسی علمی فقط و فقط طبق «کتاب‌های درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی):",
                     "   - معیار علمی تو در آرایه scientificReviews باید ۱۰۰٪ منطبق بر کتاب‌های رسمی درسی آموزش و پرورش ایران و تست‌های کنکور باشد.",
-                    "   - اگر دانش‌آموز فرمولی را مغایر با کتاب رسمی نوشته بود، در نمودار دست نزن بلکه در scientificReviews دلیلش را توضیح بده تا خودش با یک کلیک تصمیم بگیرد."
+                    "   - اگر دانش‌آموز فرمولی را مغایر با کتاب رسمی نوشته بود، در نمودار دست نزن بلکه در scientificReviews دلیلش را توضیح بده تا خودش با یک کلیک تصمیم بگیرد.",
+                    "   - scientificReviews فقط دربارهٔ چیزهایی است که کاربر واقعاً نوشته؛ هیچ فرمول یا مبحثی که در تصویر نیست را نقد نکن.",
+                    "   - اگر همه‌چیز درست بود، scientificReviews را آرایهٔ خالی [] بگذار. برای پرکردن این آرایه هیچ مطلبی از خودت نساز."
                 ].join("\n");
 
                 const userPrompt = "لطفاً تمام نوشته‌ها و فرمول‌های ریاضی و شیمی داخل این تصویر را دقیق استخراج کن، به درختوارهٔ فرمولی تبدیل کن و نکات لازم را در scientificReviews بیاور. برای هر عبارت دوعملوندی (منها، تساوی یا واکنش) جای هر عملوند را در تصویر تشخیص بده و در فیلد placement گزارش کن؛ ترتیب نهایی را خودت در رشته تعیین نکن.";
@@ -5150,7 +5377,7 @@
                 const payload = {
                     contents: [{
                         role: "user",
-                        parts: [{ text: `برای این مبحث یا یادداشت درسی یک نمودار درختی جامع، مرتب، با فرمول‌های دقیق (کسرها با \\frac{صورت}{مخرج} و زیروندها با _{عدد}) و رنگ‌بندی موضوعی بساز و اگر در متن من خطای علمی بود بدون تغییر سرخود در scientificReviews گزارش کن:\n${topicText}` }]
+                        parts: [{ text: `برای این مبحث یا یادداشت درسی یک نمودار درختی مرتب و دقیقاً بر پایهٔ همین متن بساز (هیچ مطلب بی‌ربط یا خارج از موضوع اضافه نکن) با فرمول‌های دقیق (کسرها با \\frac{صورت}{مخرج} و زیروندها با _{عدد}) و رنگ‌بندی موضوعی، و اگر در متن من خطای علمی بود بدون تغییر سرخود در scientificReviews گزارش کن:\n${topicText}` }]
                     }],
                     generationConfig: {
                         responseMimeType: "application/json",
@@ -5361,14 +5588,26 @@
         document.getElementById('btn-mm-auto-layout').addEventListener('click', () => autoLayoutMindMapTree(true));
         document.getElementById('btn-mm-flip-all').addEventListener('click', flipEntireMindMapTree);
 
+        // Handwriting → tree, with no AI in the loop at all.
+        document.getElementById('btn-mm-from-ink').addEventListener('click', (e) => {
+            const btn = e.currentTarget;
+            const label = btn.querySelector('span');
+            const original = label.textContent;
+            const made = buildMindMapFromHandwriting();
+            label.textContent = made > 0
+                ? `${toPersianDigits(made)} کارت از دست‌خط شما ساخته شد ✓`
+                : 'دست‌خط تازه‌ای برای چیدن پیدا نشد';
+            setTimeout(() => { label.textContent = original; }, 2600);
+        });
+
         // ------------------------------------------------------------------
         // Build stamp — tells the user (and me) which version is REALLY running on
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 6,
+            version: 7,
             date: '2026-10-16',
-            features: 'stylus-cursor + small-eraser + sharp-live-ink + firefox-fallback'
+            features: 'handwriting-tree + no-invented-content'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');

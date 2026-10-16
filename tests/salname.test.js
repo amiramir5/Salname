@@ -52,11 +52,14 @@ function extractFn(src, name) {
 }
 
 const FN_NAMES = [
+    'uid',
     'normalizeFormulaOperator',
     'composeFormulaFromPlacement',
     'getFlipOperations',
     'flipNodeDirections',
-    'structureBoxToSourceRect'
+    'structureBoxToSourceRect',
+    'groupStrokesIntoBlocks',
+    'assignHandwritingParents'
 ];
 
 const bodies = FN_NAMES.map(n => extractFn(html, n)).join('\n\n');
@@ -64,7 +67,9 @@ const factory = new Function(bodies + '\nreturn { ' + FN_NAMES.join(', ') + ' };
 const {
     composeFormulaFromPlacement,
     flipNodeDirections,
-    structureBoxToSourceRect
+    structureBoxToSourceRect,
+    groupStrokesIntoBlocks,
+    assignHandwritingParents
 } = factory();
 
 /* ------------------------------------------------------------------ *
@@ -297,6 +302,68 @@ ok('no raw getCoalescedEvents() call bypasses the helper',
     !/\?\s*e\.getCoalescedEvents\(\)\s*:\s*\[e\]/.test(html));
 check('all three pointer sample loops use the helper',
     (html.match(/const events = coalescedEventsOf\(e\);/g) || []).length, 3);
+
+/* ------------------------------------------------------------------ *
+ * 8. Handwriting → tree (no AI) and the "never invent content" rules
+ * ------------------------------------------------------------------ */
+console.log('\n--- 8. handwriting tree + no invented content ---');
+
+// A short pen line starting at (x, y).
+const hwStroke = (id, x, y, len = 30) => ({
+    id,
+    size: 4,
+    points: [{ x, y }, { x: x + len, y: y + 10 }]
+});
+
+check('no strokes means no blocks', groupStrokesIntoBlocks([]), []);
+
+check('two far-apart lines become two blocks',
+    groupStrokesIntoBlocks([hwStroke('a', 100, 100), hwStroke('b', 100, 220)]).length, 2);
+
+const oneLine = groupStrokesIntoBlocks([hwStroke('a', 100, 100), hwStroke('b', 140, 100)]);
+check('two close strokes on one line become one block', oneLine.length, 1);
+check('...and that block keeps both strokes', oneLine[0].strokes.length, 2);
+
+const gapped = groupStrokesIntoBlocks([hwStroke('left', 100, 100), hwStroke('right', 500, 100)]);
+check('a wide gap splits the line into two blocks', gapped.length, 2);
+check('Persian reading order: the right-most block comes first', gapped[0].strokes[0].id, 'right');
+
+const hwBlock = (x1) => ({ x0: x1 - 200, x1, y0: 0, y1: 10, strokes: [] });
+const nested = assignHandwritingParents([hwBlock(400), hwBlock(360), hwBlock(360), hwBlock(320)]);
+check('the flush-right block is the root', nested[0].parentId, null);
+check('a block indented under the root becomes its child', nested[1].parentId, nested[0].id);
+check('an equally indented block is a sibling', nested[2].parentId, nested[0].id);
+check('a deeper indent nests under the block above it', nested[3].parentId, nested[2].id);
+ok('every block gets an id', nested.every(b => typeof b.id === 'string' && b.id.length > 0));
+check('those ids are unique', new Set(nested.map(b => b.id)).size, 4);
+
+const flat = assignHandwritingParents([hwBlock(400), hwBlock(400), hwBlock(400)]);
+check('a flat page still yields a tree (first block becomes the root)',
+    flat.map(b => b.parentId), [null, flat[0].id, flat[0].id]);
+
+ok('the "tree from my own handwriting" button exists', html.includes('id="btn-mm-from-ink"'));
+ok('it is bound to the builder',
+    html.includes("getElementById('btn-mm-from-ink').addEventListener"));
+ok('cards keep the real strokes', html.includes('inkStrokes: block.strokes.map'));
+ok('cards render the preserved ink', html.includes('buildMindMapInkCanvas(node)'));
+ok('the ink canvas has its own style', /\.mindmap-node-ink\s*\{/.test(html));
+ok('the ink canvas escapes the global `canvas { position: absolute }` rule',
+    /\.mindmap-node-ink\s*\{[\s\S]*?position:\s*static/.test(html));
+ok('the builder never touches the network',
+    !/fetch\(|callGeminiAPI/.test(extractFn(html, 'buildMindMapFromHandwriting')));
+ok('the builder never reads text out of the ink',
+    !/recognizedText|renderFormattedMathAndChem/.test(extractFn(html, 'buildMindMapFromHandwriting')));
+
+ok('the prompt forbids adding content outright',
+    html.includes('ممنوعیت مطلق افزودن مطلب'));
+ok('the prompt forbids inventing branch categories',
+    html.includes('این فیلد را از خودت پر نکن'));
+ok("scientificReviews is told to stay on the user's own writing",
+    html.includes('scientificReviews فقط دربارهٔ چیزهایی است که کاربر واقعاً نوشته'));
+ok('categoryLabel is no longer a required schema field',
+    html.includes('required: ["title", "colorHex", "subBranches"]'));
+ok('the tree schema demands fidelity to the handwriting',
+    html.includes('هیچ مطلب تازه‌ای اضافه نکن'));
 
 /* ------------------------------------------------------------------ */
 console.log('\n' + pass + ' passed, ' + failures.length + ' failed');
