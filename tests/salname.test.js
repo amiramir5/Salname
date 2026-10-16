@@ -264,6 +264,40 @@ manifest.icons.forEach(icon => {
     ok('manifest icon exists: ' + icon.src, fs.existsSync(path.join(ROOT, icon.src)));
 });
 
+/* ------------------------------------------------------------------ *
+ * 7. Pen & eraser input surface (DPI mapping, cursors, coalesced samples)
+ * ------------------------------------------------------------------ */
+console.log('\n--- 7. pen / eraser input surface ---');
+
+// The interaction layer must use the same DPI mapping as the ink layer. Drawing it 1:1
+// made live strokes look softer and slightly fatter than the committed ones.
+ok('interaction canvas is device-pixel scaled like the ink layer',
+    html.includes('canvasInteraction.width = rect.width * dpr;') &&
+    html.includes('ctxInteraction.setTransform(dpr, 0, 0, dpr, 0, 0);'));
+
+// Ring size and erase size must never drift apart — they share ERASER_RADIUS.
+ok('the eraser ring uses the shared radius',
+    html.includes('ctxInteraction.arc(pt.x, pt.y, ERASER_RADIUS, 0, Math.PI * 2);'));
+ok('the erase hit-test uses the same shared radius',
+    html.includes('const eraserRadius = ERASER_RADIUS;'));
+const eraserRadiusDecl = html.match(/const ERASER_RADIUS = (\d+);/);
+ok('ERASER_RADIUS is declared', !!eraserRadiusDecl);
+ok('ERASER_RADIUS stayed small (the ring used to be radius 12)',
+    Number(eraserRadiusDecl && eraserRadiusDecl[1]) <= 10);
+
+// The native cursor is replaced by a dot drawn on the canvas, so its size is ours.
+ok('the interaction canvas hides the native cursor', /cursor:\s*none/.test(html));
+ok('the pan tool opts back into a native grab cursor', html.includes('data-cursor="grab"'));
+ok('no leftover crosshair cursor', !/cursor:\s*crosshair/.test(html));
+ok('a small pen-point cursor is drawn', html.includes('function drawPenCursorPreview('));
+
+// Firefox can return an empty coalesced list; without the fallback the movement vanished.
+ok('a safe coalesced-sample helper exists', html.includes('function coalescedEventsOf(e)'));
+ok('no raw getCoalescedEvents() call bypasses the helper',
+    !/\?\s*e\.getCoalescedEvents\(\)\s*:\s*\[e\]/.test(html));
+check('all three pointer sample loops use the helper',
+    (html.match(/const events = coalescedEventsOf\(e\);/g) || []).length, 3);
+
 /* ------------------------------------------------------------------ */
 console.log('\n' + pass + ' passed, ' + failures.length + ' failed');
 if (failures.length) {

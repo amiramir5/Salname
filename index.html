@@ -149,7 +149,15 @@
         #canvas-interaction {
             touch-action: none !important;
             -ms-touch-action: none !important;
-            cursor: crosshair;
+            /* The native cursor is hidden and the pen point is drawn on the canvas instead.
+               A system cursor is rendered at the OS cursor scale, which looks oversized and
+               clumsy on a high-DPI tablet — drawing it ourselves keeps it tiny and precise. */
+            cursor: none;
+        }
+
+        /* The Hand/Pan tool is the one case where the native cursor is more informative. */
+        #canvas-interaction[data-cursor="grab"] {
+            cursor: grab;
         }
 
         /* Left Floating Vertical Dock for Tablet & Desktop */
@@ -1870,14 +1878,21 @@
         let dpr = Math.min(window.devicePixelRatio || 1, 2);
         let cachedCanvasRect = { left: 0, top: 0, width: 1000, height: 1850 };
 
+        // Eraser size, in CSS pixels. One constant drives BOTH the erase hit-test and the
+        // on-screen ring, so the circle you see is exactly the area that gets erased.
+        // Lower it to erase more finely, raise it to erase faster.
+        const ERASER_RADIUS = 9;
+
         function uid() {
             return 'el_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
         }
 
         /**
-         * HYBRID DPI SIZING:
-         * - Static Layers (Ink, Highlighter, PDF) use crisp Retina High-DPI (up to 2x) for razor-sharp text & handwriting quality.
-         * - Active Interaction Layer uses 1:1 hardware mapping for zero-latency 60fps stylus tracking on Windows 10 tablets.
+         * UNIFORM DPI SIZING:
+         * Every layer — including the live interaction layer — is sized and scaled by the
+         * same devicePixelRatio. Drawing the interaction layer 1:1 (the old behaviour) made
+         * live strokes blurry and look slightly fatter than the committed ones on any
+         * display with devicePixelRatio > 1, then "snap" to the right weight on pen-up.
          */
         function resizeCanvases() {
             dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2);
@@ -1892,10 +1907,11 @@
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             });
 
-            // 1:1 ultra-fast interaction canvas for zero-lag live stylus drawing
-            canvasInteraction.width = rect.width;
-            canvasInteraction.height = rect.height;
-            ctxInteraction.setTransform(1, 0, 0, 1, 0, 0);
+            // Live interaction canvas — same mapping as the static layers, so what you see
+            // while writing is pixel-for-pixel what gets committed on pen-up.
+            canvasInteraction.width = rect.width * dpr;
+            canvasInteraction.height = rect.height * dpr;
+            ctxInteraction.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctxInteraction.lineCap = 'round';
             ctxInteraction.lineJoin = 'round';
 
@@ -3380,6 +3396,8 @@
             e.preventDefault();
             e.stopPropagation();
             cachedCanvasRect = paperStage.getBoundingClientRect();
+            // Wipe the hover pen dot so it never sits on top of the stroke we are starting.
+            ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
             try {
                 if (canvasInteraction.setPointerCapture) {
                     canvasInteraction.setPointerCapture(e.pointerId);
@@ -3500,9 +3518,30 @@
         });
 
         /**
+         * Coalesced pointer samples, with a safe fallback.
+         *
+         * Firefox can hand back an EMPTY list from getCoalescedEvents(), which used to make
+         * the whole movement vanish: small tight shapes like the loop of 'م' or a filled
+         * circle never got drawn. The event itself is always kept as a last resort.
+         */
+        function coalescedEventsOf(e) {
+            if (typeof e.getCoalescedEvents === 'function') {
+                const list = e.getCoalescedEvents();
+                if (list && list.length) return list;
+            }
+            return [e];
+        }
+
+        /**
          * HARDWARE-LEVEL RAW STYLUS INPUT (`pointerrawupdate`):
-         * Captures every micro-movement of the stylus tip directly from the digitizer BEFORE Chrome's 5px deadzone filter,
-         * ensuring the tiny initial loop of Persian letters 'م' and 'و' and circle fills are captured 100% intact.
+         * Captures every micro-movement of the stylus tip directly from the digitizer BEFORE
+         * the browser's pointermove delay, ensuring the tiny initial loop of Persian letters
+         * 'م' and 'و' and circle fills are captured 100% intact.
+         *
+         * NOTE: pointerrawupdate is Chromium-only (Chrome and Edge). Firefox and Safari never
+         * fire it, so on those browsers freehand drawing falls back to pointermove +
+         * getCoalescedEvents — which still works, but samples the pen noticeably less often.
+         * That is the main reason tight Persian loops come out cleaner in Edge.
          */
         canvasInteraction.addEventListener('pointerrawupdate', (e) => {
             if (e.pointerType === 'pen' || e.pointerType === 'eraser') {
@@ -3524,7 +3563,7 @@
             // Only use raw update for freehand pen/highlighter or eraser
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
                 AppState.usedRawUpdate = true;
-                const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : [e];
+                const events = coalescedEventsOf(e);
                 for (let i = 0; i < events.length; i++) {
                     eraseAtPoint(getCanvasPoint(events[i]));
                 }
@@ -3535,7 +3574,7 @@
 
             if ((AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter') && !AppState.straightLineMode) {
                 AppState.usedRawUpdate = true;
-                const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : [e];
+                const events = coalescedEventsOf(e);
                 const prevIdx = AppState.currentRawPoints.length;
                 for (let i = 0; i < events.length; i++) {
                     AppState.currentRawPoints.push(getCanvasPoint(events[i]));
@@ -3553,7 +3592,10 @@
 
             // Track barrel button state while stylus is hovering above screen (before pointerdown)
             if (!AppState.isDrawing) {
-                if (e.pointerType === 'pen' || e.pointerType === 'eraser') {
+                if (e.pointerType === 'touch') return;
+
+                const hoveringStylus = e.pointerType === 'pen' || e.pointerType === 'eraser';
+                if (hoveringStylus) {
                     AppState.hoverBarrelPressed = (
                         e.pointerType === 'eraser' ||
                         e.button === 2 ||
@@ -3561,11 +3603,18 @@
                         (e.buttons & 2) === 2 ||
                         (e.buttons & 32) === 32
                     );
-                    if (AppState.hoverBarrelPressed) {
-                        drawEraserCursorPreview(getCanvasPoint(e));
-                    } else if (AppState.activeTool !== 'lasso') {
-                        ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
-                    }
+                } else {
+                    AppState.hoverBarrelPressed = (e.buttons & 2) === 2;
+                }
+
+                // Draw the writing point ourselves: the native cursor is rendered at the OS
+                // cursor scale, which looks oversized and clumsy on a high-DPI tablet.
+                const wantsEraserRing = AppState.hoverBarrelPressed || AppState.activeTool === 'eraser';
+                if (wantsEraserRing) {
+                    drawEraserCursorPreview(getCanvasPoint(e));
+                } else if (AppState.activeTool !== 'lasso' && AppState.activeTool !== 'pan') {
+                    ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+                    drawPenCursorPreview(getCanvasPoint(e));
                 }
                 return;
             }
@@ -3587,7 +3636,7 @@
                 return;
             }
 
-            const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : [e];
+            const events = coalescedEventsOf(e);
 
             // Handle active Eraser (either via Eraser tool OR holding Stylus Barrel Button)
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
@@ -3624,6 +3673,14 @@
                     renderInteractionOverlay();
                 }
             }
+        });
+
+        // The stylus left the hover range / the cursor left the paper — never leave the
+        // pen dot behind.
+        canvasInteraction.addEventListener('pointerleave', () => {
+            if (AppState.isDrawing) return;
+            if (AppState.activeTool === 'lasso') return;
+            ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
         });
 
         function finishPointerInteraction(e) {
@@ -3742,14 +3799,33 @@
          * 10. VECTOR ERASER (WHOLE STROKE & PARTIAL SEGMENT SPLITTING)
          * ============================================================================
          */
+        /**
+         * The writing point shown while the pen hovers above the paper.
+         * Deliberately tiny — a 2px dot inside a faint halo — so it marks the exact spot
+         * without covering the letter being written.
+         */
+        function drawPenCursorPreview(pt) {
+            ctxInteraction.save();
+            ctxInteraction.beginPath();
+            ctxInteraction.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
+            ctxInteraction.fillStyle = '#0F172A';
+            ctxInteraction.fill();
+            ctxInteraction.beginPath();
+            ctxInteraction.arc(pt.x, pt.y, 3.4, 0, Math.PI * 2);
+            ctxInteraction.strokeStyle = 'rgba(15, 23, 42, 0.25)';
+            ctxInteraction.lineWidth = 1;
+            ctxInteraction.stroke();
+            ctxInteraction.restore();
+        }
+
         function drawEraserCursorPreview(pt) {
             ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
             ctxInteraction.save();
             ctxInteraction.beginPath();
-            ctxInteraction.arc(pt.x, pt.y, 12, 0, Math.PI * 2);
+            ctxInteraction.arc(pt.x, pt.y, ERASER_RADIUS, 0, Math.PI * 2);
             ctxInteraction.strokeStyle = '#EF4444';
-            ctxInteraction.fillStyle = 'rgba(239, 68, 68, 0.14)';
-            ctxInteraction.lineWidth = 1.5;
+            ctxInteraction.fillStyle = 'rgba(239, 68, 68, 0.10)';
+            ctxInteraction.lineWidth = 1.25;
             ctxInteraction.fill();
             ctxInteraction.stroke();
             ctxInteraction.restore();
@@ -3764,7 +3840,7 @@
         }
 
         function eraseAtPoint(pt) {
-            const eraserRadius = 13;
+            const eraserRadius = ERASER_RADIUS;
             let changed = false;
 
             if (AppState.eraserMode === 'stroke') {
@@ -5154,6 +5230,9 @@
             btn.addEventListener('click', (e) => {
                 const tool = btn.dataset.tool;
                 AppState.activeTool = tool;
+                // Hand/Pan is the only tool where the native cursor says more than our dot.
+                if (tool === 'pan') canvasInteraction.setAttribute('data-cursor', 'grab');
+                else canvasInteraction.removeAttribute('data-cursor');
                 if (tool !== 'lasso') clearSelection();
 
                 document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
@@ -5287,9 +5366,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 5,
+            version: 6,
             date: '2026-10-16',
-            features: 'offline-pwa + local-assets + tests + docs'
+            features: 'stylus-cursor + small-eraser + sharp-live-ink + firefox-fallback'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
