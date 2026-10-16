@@ -343,6 +343,30 @@ const gapped = groupStrokesIntoBlocks([hwStroke('left', 100, 100), hwStroke('rig
 check('a really wide empty area still splits the line', gapped.length, 2);
 check('Persian reading order: the right-most block comes first', gapped[0].strokes[0].id, 'right');
 
+// The old code derived its "dot size" from a percentile of ALL stroke heights, so on a page
+// where the dots outnumber the letters the threshold collapsed and every dot became its own
+// card. Dots are now recognised structurally, so that ratio cannot break the grouping.
+const dotHeavy = [];
+for (let line = 0; line < 3; line++) {
+    const y = 150 + line * 140;
+    dotHeavy.push(hwStroke('w' + line, 900, y, 200));
+    dotHeavy.push(hwDot('a' + line, 940, y - 14));
+    dotHeavy.push(hwDot('b' + line, 960, y - 14));
+    dotHeavy.push(hwDot('c' + line, 980, y - 14));
+}
+const dotHeavyBlocks = groupStrokesIntoBlocks(dotHeavy);
+check('a dot-heavy page still makes one card per written line', dotHeavyBlocks.length, 3);
+check('...with every dot inside its own line\'s card',
+    dotHeavyBlocks.every(b => b.strokes.length === 4), true);
+
+// A stroke that cannot draw anything (an outline removed with «بی‌رنگ», a white fill on
+// white) used to become a card with nothing in it — the "empty box".
+const ghost = { id: 'ghost', size: 4, color: 'transparent', points: [{ x: 100, y: 100 }, { x: 200, y: 100 }] };
+check('a stroke that draws nothing is never turned into a card',
+    groupStrokesIntoBlocks([ghost]).length, 0);
+check('...and it does not disturb the cards around it',
+    groupStrokesIntoBlocks([ghost, hwStroke('real', 300, 100, 200)]).length, 1);
+
 const hwBlock = (x1) => ({ x0: x1 - 200, x1, y0: 0, y1: 10, strokes: [] });
 const nested = assignHandwritingParents([hwBlock(400), hwBlock(360), hwBlock(360), hwBlock(320)]);
 check('the flush-right block is the root', nested[0].parentId, null);
@@ -359,17 +383,31 @@ check('a flat page still yields a tree (first block becomes the root)',
 ok('the "tree from my own handwriting" button exists', html.includes('id="btn-mm-from-ink"'));
 ok('it is bound to the builder',
     html.includes("getElementById('btn-mm-from-ink').addEventListener"));
-ok('cards keep the real strokes', html.includes('inkStrokes: block.strokes.map'));
+ok('cards keep the real strokes', html.includes('block.inkStrokes = block.strokes.map'));
 ok('cards render the preserved ink', html.includes('buildMindMapInkCanvas(node)'));
 ok('the ink canvas has its own style', /\.mindmap-node-ink\s*\{/.test(html));
 ok('the ink canvas escapes the global `canvas { position: absolute }` rule',
     /\.mindmap-node-ink\s*\{[\s\S]*?position:\s*static/.test(html));
+ok('the ink canvas is transparent, not a white box inside the card',
+    /\.mindmap-node-ink\s*\{[\s\S]*?background:\s*transparent/.test(html));
+ok('cards get a paper-like gradient background', html.includes('function getCardBackgroundForNode'));
+ok('tiny ink cannot be blown up into a poster', html.includes('const MAX_INK_SCALE = 3'));
+ok('no card can ever render empty',
+    html.includes('function canvasHasInk') && html.includes('canvasHasInk(buildMindMapInkCanvas'));
 ok('branches are drawn as smooth curves, not straight diagonals',
     /bezierCurveTo/.test(extractFn(html, 'drawMindMapConnectors')));
 ok('the builder never touches the network',
     !/fetch\(|callGeminiAPI/.test(extractFn(html, 'buildMindMapFromHandwriting')));
 ok('the builder never reads text out of the ink',
     !/recognizedText|renderFormattedMathAndChem/.test(extractFn(html, 'buildMindMapFromHandwriting')));
+
+// Offline resilience: the app is a PWA, so it must say plainly that only the AI needs a network.
+ok('the app can tell that it is offline',
+    html.includes('function isOffline()') && html.includes('id="ai-offline-note"'));
+ok('an offline AI failure is not blamed on the API key',
+    /isOffline\(\)\s*\?/.test(html));
+ok('the topic-tree loader can never get stuck open',
+    html.includes('مدل درختی برنگرداند'));
 
 ok('the prompt forbids adding content outright',
     html.includes('ممنوعیت مطلق افزودن مطلب'));

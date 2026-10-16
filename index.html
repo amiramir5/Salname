@@ -272,8 +272,9 @@
             position: static;
             display: block;
             pointer-events: none;
-            border-radius: 6px;
-            background: #FFFFFF;
+            /* Transparent, not white: a white rectangle inside a tinted card reads as an
+               empty box. The card's own background shows through instead. */
+            background: transparent;
         }
 
         /* Built-in Stacked Fraction & Chemistry Formula Styling (Works even offline) */
@@ -1062,6 +1063,13 @@
                 <div id="ai-loading-box" class="hidden p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 flex items-center gap-2 font-medium">
                     <span class="w-3 h-3 rounded-full bg-amber-500 animate-ping shrink-0"></span>
                     <span id="ai-loading-text">در حال ارسال تصویر باکیفیت دست‌خط به Gemini 3.8 Flash و استخراج فرمول‌ها...</span>
+                </div>
+
+                <!-- Only the AI needs a connection; everything else works with none at all. -->
+                <div id="ai-offline-note" class="hidden p-3 bg-slate-100 border border-slate-300 rounded-xl text-slate-700 text-[11px] leading-relaxed">
+                    <span class="font-bold">الان آفلاین هستی.</span>
+                    نوشتن، ذخیره روی همین دستگاه، پشتیبان‌گیری و «ساخت درخت از دست‌خط خودت» بدون هیچ اینترنتی کار می‌کنند.
+                    فقط سه دکمهٔ هوش مصنوعی به اینترنت نیاز دارند.
                 </div>
 
                 <!-- Scientific Fact-Check & Advisory Container (Non-intrusive verification) -->
@@ -2307,6 +2315,16 @@
             return isRoot ? '#EFF6FF' : '#FFFFFF';
         }
 
+        /**
+         * A card's background: the palette tint at the top fading into white. A flat block of
+         * colour looks like a form field; the fade makes the card read as a piece of paper,
+         * and it lets hand-written ink sit on the card without a second white box behind it.
+         */
+        function getCardBackgroundForNode(colorHex, isRoot = false) {
+            const bg = getBgForNodeColor(colorHex, isRoot);
+            return `linear-gradient(180deg, ${bg} 0%, #FFFFFF 100%)`;
+        }
+
         function isMindMapNodeVisible(node, allNodes) {
             let curr = node;
             while (curr && curr.parentId) {
@@ -2554,7 +2572,7 @@
                 el.style.borderRightColor = nodeColor;
                 el.style.borderColor = isSelected ? nodeColor : '#CBD5E1';
                 el.style.borderRightWidth = '4.5px';
-                el.style.backgroundColor = getBgForNodeColor(nodeColor, !node.parentId);
+                el.style.background = getCardBackgroundForNode(nodeColor, !node.parentId);
                 el.style.pointerEvents = AppState.mindmapFreeInkLock ? 'none' : 'auto';
                 if (AppState.mindmapFreeInkLock) {
                     el.style.opacity = '0.92';
@@ -4677,21 +4695,41 @@
          * how the notes are laid out on the page.
          */
 
+        // Ink is magnified to fill its card, but never more than this: a lone dot or a
+        // two-letter word must not be blown up into a poster.
+        const MAX_INK_SCALE = 3;
+
         /**
          * Groups raw strokes into the blocks a human would call "one item of writing".
          *
-         * Two facts drive this for Persian handwriting: the dots of پ/ت/چ/ج/ق/ی are separate
-         * strokes even though they belong to a letter, and the space between two words is far
-         * smaller than the empty area between two separate notes. So lines are built from the
-         * letter bodies only, every dot is then pulled into the nearest line, and a line is
-         * only ever split where a really wide empty area proves a new item — never at a word
-         * gap, which is what used to explode one written line into a dozen cards.
+         * Persian handwriting mixes three kinds of stroke, and telling them apart with a size
+         * threshold does NOT work: on a page where the dots outnumber the letters the "typical"
+         * stroke IS a dot, so the threshold collapses and every dot becomes a line of its own —
+         * which is what turned three written lines into a dozen cards. The decision is made
+         * structurally instead:
+         *
+         *   1. The letter bodies (the taller strokes) define the text lines.
+         *   2. A stroke that is small AND compact — a dot of پ/ت/چ/ج/ق/ی drawn as a little
+         *      circle, a tap, a hamza — can never be a line of its own: it is pulled into the
+         *      nearest line, as long as it is vertically close enough to plausibly belong to it.
+         *   3. Anything else (a dash, a highlighter sweep) is line-like and stands on its own.
+         *
+         * A line is then only split where a really wide empty area proves a new item — never at
+         * a word gap, which is the other half of the old over-splitting.
          */
         function groupStrokesIntoBlocks(strokes) {
             const boxes = [];
             strokes.forEach(s => {
                 const pts = s.points || [];
                 if (pts.length === 0) return;
+
+                // A stroke that cannot draw anything — an outline the user removed with «بی‌رنگ»,
+                // an unfilled shape with no outline — could only ever produce an EMPTY CARD, so
+                // it takes no part in the grouping at all.
+                const hasStroke = !s.color || s.color !== 'transparent';
+                const hasFill = !!s.fillColor && s.fillColor !== 'transparent' && pts.length >= 3;
+                if (!hasStroke && !hasFill) return;
+
                 let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
                 pts.forEach(p => {
                     if (p.x < x0) x0 = p.x;
@@ -4701,26 +4739,27 @@
                 });
                 const pad = (s.size || 3) / 2 + 1;
                 x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
-                boxes.push({ stroke: s, x0, y0, x1, y1, cy: (y0 + y1) / 2, cx: (x0 + x1) / 2, h: y1 - y0 });
+                boxes.push({ stroke: s, x0, y0, x1, y1, cy: (y0 + y1) / 2, cx: (x0 + x1) / 2, h: y1 - y0, w: x1 - x0 });
             });
             if (boxes.length === 0) return [];
 
-            // Size reference: the median stroke, and the taller "real letter" strokes.
-            const sortedH = boxes.map(b => b.h).sort((a, b) => a - b);
-            const medH = sortedH[Math.floor(sortedH.length / 2)] || 18;
-            const tallH = sortedH[Math.floor(sortedH.length * 0.75)] || medH;
-            const dotMaxH = Math.max(medH * 0.55, tallH * 0.35);
-            const isDot = b => b.h <= dotMaxH;
+            // How tall is a real letter here? The 90th percentile is used because it is a letter
+            // body even on a page that is mostly dots, where the median is a dot.
+            const byHeight = boxes.map(b => b.h).sort((a, b) => a - b);
+            const tallH = byHeight[Math.floor(byHeight.length * 0.9)] || byHeight[byHeight.length - 1] || 18;
 
-            let bodyBoxes = boxes.filter(b => !isDot(b));
-            if (bodyBoxes.length === 0) bodyBoxes = boxes.slice();   // a page of nothing but small strokes
-            const bodySet = new Set(bodyBoxes);
+            // A dot is small AND compact (its width is not much bigger than its height). A short
+            // dash or a highlighter sweep is small but wide, and must stay a line of its own.
+            const bodyLimit = tallH * 0.75;
+            const isFloating = b => b.h <= bodyLimit && b.w <= bodyLimit;
+            let lineBoxes = boxes.filter(b => !isFloating(b));
+            let floating = boxes.filter(isFloating);
+            if (lineBoxes.length === 0) { lineBoxes = boxes.slice(); floating = []; }   // nothing but dots
 
-            // 1. Lines are built from letter bodies, so a floating dot can never become a line
-            //    of its own — which is exactly how it used to turn into an extra card.
-            const lineTol = Math.max(12, tallH * 0.75);
+            // 1. Text lines are built from the line-like strokes.
+            const lineTol = Math.max(12, tallH * 0.8);
             const lines = [];
-            bodyBoxes.slice().sort((a, b) => a.cy - b.cy).forEach(b => {
+            lineBoxes.slice().sort((a, b) => a.cy - b.cy).forEach(b => {
                 let line = lines.find(L => Math.abs(L.cy - b.cy) <= lineTol);
                 if (!line) {
                     line = { cy: b.cy, members: [] };
@@ -4730,20 +4769,23 @@
                 line.cy = line.members.reduce((sum, m) => sum + m.cy, 0) / line.members.length;
             });
 
-            // 2. Every dot joins the line it sits closest to, so it stays part of its own word.
-            boxes.forEach(b => {
-                if (bodySet.has(b)) return;
+            // 2. Every floating stroke is pulled into the line it is vertically closest to, which
+            //    is what keeps the dots of a word inside that word's card. A stroke too far away
+            //    to be a dot of that line (a stray mark, a separate short note) keeps its own line.
+            const attachDist = tallH * 1.6;
+            floating.forEach(b => {
                 let best = lines[0], bestD = Infinity;
                 lines.forEach(L => {
                     const d = Math.abs(L.cy - b.cy);
                     if (d < bestD) { bestD = d; best = L; }
                 });
-                best.members.push(b);
+                if (best && bestD <= attachDist) best.members.push(b);
+                else lines.push({ cy: b.cy, members: [b] });
             });
 
             // 3. Inside a line only a really wide empty area starts a new item. Persian reads
             //    right-to-left, so the strokes of a line are walked from the right edge leftwards.
-            const gapTol = Math.max(85, tallH * 2.2);
+            const gapTol = Math.max(48, tallH * 2.2);
             const blocks = [];
             lines.forEach(line => {
                 line.members.sort((a, b) => b.cx - a.cx);
@@ -4788,6 +4830,22 @@
         }
 
         /**
+         * True when a rendered ink canvas actually contains a mark. Used as a last line of
+         * defence: a card that would draw nothing (a shape with its outline removed, a white
+         * fill on white) must never appear, because it looks like an empty box on the page.
+         */
+        function canvasHasInk(cv) {
+            if (!cv || !cv.width || !cv.height) return false;
+            try {
+                const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+                for (let i = 3; i < d.length; i += 4) if (d[i] > 8) return true;
+            } catch (_) {
+                return true;   // never drop a card because of a canvas quirk
+            }
+            return false;
+        }
+
+        /**
          * Renders one card's preserved handwriting. The strokes are stored relative to the
          * block origin, so they only need scaling to fit the card — they stay vector, and
          * therefore stay sharp at any size.
@@ -4799,8 +4857,11 @@
 
             // Height comes from the ink's own aspect ratio at the card's real width, so a
             // tall block gets a tall card and a single line stays a thin strip. Deriving it
-            // from the card height instead would fight the measured header height.
-            const availH = Math.min(Math.max(Math.round(availW * (inkH / inkW)), 22), 130);
+            // from the card height instead would fight the measured header height. The 22px
+            // floor keeps even one lone dot visible; MAX_INK_SCALE stops a two-letter word or
+            // a single dot from being blown up into a poster.
+            const ratioH = Math.round(availW * (inkH / inkW));
+            const availH = Math.min(Math.max(ratioH, 22), 130, Math.max(22, Math.round(inkH * MAX_INK_SCALE)));
 
             const cv = document.createElement('canvas');
             cv.className = 'mindmap-node-ink';
@@ -4853,20 +4914,39 @@
             const blocks = groupStrokesIntoBlocks(sourceStrokes);
             if (blocks.length === 0) return 0;
 
+            // Freeze each block's ink (relative to its own origin) and drop anything that would
+            // render as an EMPTY CARD. This is done BEFORE the tree is built so a child can
+            // never be left pointing at a parent that no longer exists.
+            blocks.forEach(block => {
+                block.inkW = Math.max(1, block.x1 - block.x0);
+                block.inkH = Math.max(1, block.y1 - block.y0);
+                block.inkStrokes = block.strokes.map(s => {
+                    const copy = JSON.parse(JSON.stringify(s));
+                    copy.points = s.points.map(p => ({ x: p.x - block.x0, y: p.y - block.y0, p: p.p }));
+                    return copy;
+                });
+            });
+            const usable = blocks.filter(b => canvasHasInk(buildMindMapInkCanvas({
+                w: 170, inkW: b.inkW, inkH: b.inkH, inkStrokes: b.inkStrokes
+            })));
+            if (usable.length === 0) return 0;
+
             if (AppState.workspaceMode !== 'mindmap') switchWorkspaceMode('mindmap');
             pushUndoState();
 
-            assignHandwritingParents(blocks);
+            assignHandwritingParents(usable);
 
             const baseColorIdx = AppState.mindmapData.nodes.filter(n => !n.parentId).length;
-            blocks.forEach((block, i) => {
-                const inkW = Math.max(1, block.x1 - block.x0);
-                const inkH = Math.max(1, block.y1 - block.y0);
+            usable.forEach((block, i) => {
                 const w = 170;
-                // Rough card height for the first layout pass; the real size is measured
-                // from the DOM right after rendering.
-                const estH = Math.min(Math.max(Math.round((w - 24) * (inkH / inkW)), 22), 130);
-                const h = estH + 30;
+                // Rough card height for the first layout pass; the real size is measured from
+                // the DOM right after rendering. Same cap as the real canvas, so the first pass
+                // and the final render agree.
+                const estH = Math.min(
+                    Math.max(Math.round((w - 24) * (block.inkH / block.inkW)), 22),
+                    130,
+                    Math.max(22, Math.round(block.inkH * MAX_INK_SCALE))
+                );
 
                 AppState.mindmapData.nodes.push({
                     id: block.id,
@@ -4874,17 +4954,13 @@
                     category: block.parentId ? 'دستخط' : 'مبحث اصلی',
                     text: '',
                     // Real ink, stored relative to the block origin so the card can scale it.
-                    inkStrokes: block.strokes.map(s => {
-                        const copy = JSON.parse(JSON.stringify(s));
-                        copy.points = s.points.map(p => ({ x: p.x - block.x0, y: p.y - block.y0, p: p.p }));
-                        return copy;
-                    }),
-                    inkW: inkW,
-                    inkH: inkH,
+                    inkStrokes: block.inkStrokes,
+                    inkW: block.inkW,
+                    inkH: block.inkH,
                     x: 0,
                     y: 0,
                     w: w,
-                    h: h,
+                    h: estH + 30,
                     color: MINDMAP_COLORS[(baseColorIdx + i) % MINDMAP_COLORS.length],
                     collapsed: false
                 });
@@ -4895,7 +4971,7 @@
             // layout. Re-render once so the ink fills the real card width instead of the
             // nominal one — the strokes are vector, so this stays perfectly sharp.
             renderMindMapDOMNodes();
-            return blocks.length;
+            return usable.length;
         }
 
         /**
@@ -5397,7 +5473,9 @@
                 }
             } catch (err) {
                 console.error('Gemini OCR/Tree Error:', err);
-                loadingText.textContent = 'خطا در ارتباط با جمنای: لطفاً از صحت کلید API خود و اتصال اینترنت اطمینان حاصل کنید.';
+                loadingText.textContent = isOffline()
+                    ? 'اینترنت قطع است. بدون اینترنت نوشتن، ذخیره، پشتیبان‌گیری و «ساخت درخت از دست‌خط خودت» کار می‌کند؛ فقط هوش مصنوعی به اینترنت نیاز دارد.'
+                    : 'خطا در ارتباط با جمنای: لطفاً از صحت کلید API خود و اتصال اینترنت اطمینان حاصل کنید.';
             }
         }
 
@@ -5436,10 +5514,15 @@
                 if (parsed.trees && parsed.trees.length > 0) {
                     populateMindMapFromGeminiTrees(parsed.trees, parsed.scientificReviews || []);
                     loadingBox.classList.add('hidden');
+                } else {
+                    // Without this the loading box stayed open forever with no explanation.
+                    loadingText.textContent = 'مدل درختی برنگرداند. یک بار دیگر بزن، یا متن را روشن‌تر بنویس.';
                 }
             } catch (err) {
                 console.error('Gemini Prompt Tree Error:', err);
-                loadingText.textContent = 'خطا در ارتباط با جمنای: لطفاً کلید API خود را بررسی کنید.';
+                loadingText.textContent = isOffline()
+                    ? 'اینترنت قطع است. بدون اینترنت نوشتن، ذخیره، پشتیبان‌گیری و «ساخت درخت از دست‌خط خودت» کار می‌کند؛ فقط هوش مصنوعی به اینترنت نیاز دارد.'
+                    : 'خطا در ارتباط با جمنای: لطفاً کلید API خود را بررسی کنید.';
             }
         }
 
@@ -5648,9 +5731,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 8,
+            version: 9,
             date: '2026-10-16',
-            features: 'line-grouping + curved-branches'
+            features: 'dots-join-their-line + no-empty-cards + card-design'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -5659,6 +5742,22 @@
             }
             window.__BUILD_INFO = APP_BUILD;
         })();
+
+        /**
+         * The whole app — writing, storage, backup and the handwriting tree — runs with no
+         * connection at all; only the Gemini buttons need the network. So when the device is
+         * offline, say that plainly instead of blaming the API key.
+         */
+        function isOffline() {
+            return typeof navigator !== 'undefined' && navigator.onLine === false;
+        }
+        function updateOnlineStatus() {
+            const note = document.getElementById('ai-offline-note');
+            if (note) note.classList.toggle('hidden', !isOffline());
+        }
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
         document.getElementById('btn-mm-toggle-ink').addEventListener('click', () => {
             AppState.mindmapFreeInkLock = !AppState.mindmapFreeInkLock;
             const lbl = document.getElementById('label-mm-ink-mode');
