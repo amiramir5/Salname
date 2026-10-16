@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The asset/cache guard below diffs against the previous commit.
+          fetch-depth: 2
 
       - uses: actions/setup-node@v4
         with:
@@ -22,6 +25,23 @@ jobs:
 
       - name: Check the service worker syntax
         run: node --check sw.js
+
+      # assets/ is served cache-first, so a changed asset stays invisible to an already-installed
+      # app until CACHE_VERSION changes. That failure looks exactly like "my fix did nothing" on
+      # the user's device, so it must never be able to slip through again.
+      - name: Bump the service worker cache whenever an asset changes
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet HEAD~1 HEAD -- assets/; then
+            echo "No asset changes in this push."
+            exit 0
+          fi
+          if git diff HEAD~1 HEAD -- sw.js | grep -q '^[+-]const CACHE_VERSION'; then
+            echo "CACHE_VERSION was bumped alongside the asset change."
+            exit 0
+          fi
+          echo "::error::assets/ changed but sw.js CACHE_VERSION did not — installed apps would keep the old asset. Bump CACHE_VERSION."
+          exit 1
 
       # Guards against the Tailwind build drifting away from the classes actually used.
       - name: Rebuild Tailwind and fail if assets/tailwind.css is stale
