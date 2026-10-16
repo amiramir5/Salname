@@ -615,6 +615,9 @@
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><path d="M10 6.5h4"></path><path d="M12 6.5v11h2"></path></svg>
                 <span>مرتب‌سازی هوشمند درخت</span>
             </button>
+            <button id="btn-mm-flip-all" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-md text-[11px] font-medium flex items-center gap-1 shrink-0 transition" title="اگر هوش مصنوعی جهت فرمول‌ها را برعکس خواند، با یک کلیک جهت همهٔ فرمول‌های این صفحه را برگردان">
+                <span>⇄ برگرداندن جهت همهٔ فرمول‌ها</span>
+            </button>
             <button id="btn-mm-ai-handwriting" class="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-[11px] font-bold flex items-center gap-1 shrink-0 shadow-sm transition" title="خواندن دقیق دست‌خط و فرمول‌ها با Gemini 3.8 Flash و ساخت درختواره رنگی">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z"></path></svg>
                 <span>تبدیل دست‌خط و فرمول به درختواره (Gemini 3.8)</span>
@@ -645,6 +648,9 @@
             <canvas id="canvas-ink" class="pointer-events-none"></canvas>
             <!-- Layer 3: Ultra-Fast 1x Active Stroke Preview, Lasso Path, and Transform Bounding Box Handles -->
             <canvas id="canvas-interaction"></canvas>
+
+            <!-- Layer 3.5: AI-Extracted 2D Structure Images (Handwriting drawings kept as real pictures) -->
+            <div id="mindmap-images-layer" class="hidden absolute inset-0 pointer-events-none z-10 overflow-hidden"></div>
 
             <!-- Layer 4: Interactive Mind-Map Nodes Overlay (Only visible in Mind-Map Workspace Mode) -->
             <div id="mindmap-nodes-layer" class="hidden absolute inset-0 pointer-events-none z-20 overflow-hidden"></div>
@@ -1717,7 +1723,7 @@
 
             // Separate Persistent Buffers for Daily Planner vs Daily Mind-Map Summary
             plannerData: { strokes: [], texts: [], symbols: [] },
-            mindmapData: { strokes: [], texts: [], symbols: [], nodes: [], reviews: [] },
+            mindmapData: { strokes: [], texts: [], symbols: [], nodes: [], reviews: [], images: [] },
             selectedMindmapNodeId: null,
             editingMindmapNodeId: null,
             mindmapFreeInkLock: false,
@@ -2043,6 +2049,7 @@
                 texts: AppState.texts,
                 symbols: AppState.symbols,
                 mindmapNodes: AppState.mindmapData.nodes,
+                mindmapImages: AppState.mindmapData.images || [],
                 priorities: AppState.priorities,
                 paperType: AppState.paperType
             }));
@@ -2086,6 +2093,9 @@
             if (snap.mindmapNodes) {
                 AppState.mindmapData.nodes = snap.mindmapNodes;
             }
+            if (snap.mindmapImages) {
+                AppState.mindmapData.images = snap.mindmapImages;
+            }
             syncActiveBuffersToStorage();
             AppState.priorities = snap.priorities || ['', '', ''];
             AppState.paperType = snap.paperType || 'lined';
@@ -2113,6 +2123,7 @@
                     symbols: AppState.plannerData.symbols,
                     mindmapNodes: AppState.mindmapData.nodes,
                     mindmapReviews: AppState.mindmapData.reviews || [],
+                    mindmapImages: AppState.mindmapData.images || [],
                     mindmapStrokes: AppState.mindmapData.strokes,
                     mindmapTexts: AppState.mindmapData.texts,
                     mindmapSymbols: AppState.mindmapData.symbols,
@@ -2302,7 +2313,132 @@
             }
         }
 
+        /**
+         * Independent, reversible swaps that can exist inside one node text.
+         * Repeated clicks cycle through EVERY combination (not just two states),
+         * so the ⇄ button always keeps making progress.
+         */
+        function getFlipOperations(text) {
+            const ops = [];
+
+            // An "=" only counts as an equation when it is NOT the "(=O)" of a
+            // carbonyl group, otherwise CH_3-C(=O)-CH_3 would be torn apart.
+            const eqOp = text.includes(' = ')
+                ? ' = '
+                : (text.includes('=') && !text.includes('(=') ? '=' : null);
+
+            // (a) subtraction inside a fraction numerator
+            if (/\\frac\{[^{}]+?\s*[-−–]\s*[^{}]+?\}/.test(text)) {
+                ops.push((t) => t.replace(
+                    /\\frac\{([^{}]+?)\s*[-−–]\s*([^{}]+?)\}/g,
+                    (_, a, b) => `\\frac{${b.trim()} - ${a.trim()}}`
+                ));
+            }
+
+            // (b) the two sides of an equality
+            if (eqOp) {
+                ops.push((t) => {
+                    const i = t.indexOf(eqOp);
+                    if (i < 0) return t;
+                    return `${t.slice(i + eqOp.length).trim()}${eqOp}${t.slice(0, i).trim()}`;
+                });
+            }
+
+            // (c) a plain two-operand expression (arithmetic or reaction). Only when
+            //     the node is neither a fraction nor an equation, and only when the
+            //     operator is spaced, so CH_3-C(=O)-CH_3 is never touched.
+            if (!/\\frac\{/.test(text) && !eqOp) {
+                const arrowMatch = text.match(/\s(→|⇌|←)\s/);
+                if (arrowMatch) {
+                    const arrow = arrowMatch[1];
+                    ops.push((t) => {
+                        const i = t.indexOf(` ${arrow} `);
+                        if (i < 0) return t;
+                        return `${t.slice(i + arrow.length + 2).trim()} ${arrow} ${t.slice(0, i).trim()}`;
+                    });
+                } else {
+                    const dashMatch = text.match(/\s+[-−–]\s+/);
+                    if (dashMatch) {
+                        const op = dashMatch[0];
+                        ops.push((t) => {
+                            const i = t.indexOf(op);
+                            if (i < 0) return t;
+                            return `${t.slice(i + op.length).trim()}${op}${t.slice(0, i).trim()}`;
+                        });
+                    }
+                }
+            }
+
+            return ops;
+        }
+
+        /**
+         * Cycles a node's formula through every possible left/right permutation.
+         * The permutations are always derived from a frozen "base" text so each
+         * click reaches a NEW state (no dead clicks), and the cycle restarts by
+         * itself as soon as the user edits the node by hand.
+         */
+        function flipNodeDirections(node) {
+            const current = String(node.text || '').trim();
+            const prev = node.__flipState;
+
+            let base, index, ops;
+            if (prev && prev.lastResult === current) {
+                // Continue the ongoing cycle from its frozen base
+                base = prev.base;
+                ops = getFlipOperations(base);
+                if (ops.length === 0) return current;
+                index = (prev.index + 1) % Math.pow(2, ops.length);
+            } else {
+                // Text was edited (or first click) → start a fresh cycle
+                base = current;
+                ops = getFlipOperations(base);
+                if (ops.length === 0) return current;
+                index = 1;
+            }
+
+            let result = base;
+            ops.forEach((apply, i) => {
+                if (index & (1 << i)) result = apply(result);
+            });
+
+            node.__flipState = { base, index, lastResult: result };
+            return result;
+        }
+
+        /**
+         * One-click repair for the whole tree — for when the AI reversed the
+         * direction of an entire page of formulas at once.
+         */
+        function flipEntireMindMapTree() {
+            const nodes = AppState.mindmapData.nodes || [];
+            if (nodes.length === 0) return 0;
+
+            pushUndoState();
+            let changed = 0;
+            nodes.forEach(n => {
+                const flipped = flipNodeDirections(n);
+                if (flipped !== String(n.text || '').trim()) {
+                    n.text = flipped;
+                    changed++;
+                }
+            });
+
+            if (changed === 0) {
+                // Nothing reversible on this page — drop the pointless history entry
+                AppState.undoStack.pop();
+                updateUndoRedoButtons();
+                return 0;
+            }
+
+            renderMindMapDOMNodes();
+            renderAllLayers();
+            scheduleSavePage();
+            return changed;
+        }
+
         function renderMindMapDOMNodes() {
+            renderMindMapImages();
             const container = document.getElementById('mindmap-nodes-layer');
             container.innerHTML = '';
             if (AppState.workspaceMode !== 'mindmap') {
@@ -2370,28 +2506,7 @@
                 btnFlip.addEventListener('click', (e) => {
                     e.stopPropagation();
                     pushUndoState();
-                    let txt = (node.text || '').trim();
-
-                    // 1. If equation has a fraction with minus, cycle between (1) flip numerator, (2) flip equality, (3) both
-                    const hasFracMinus = /\\frac\{([^{}]+?)\s*-\s*([^{}]+?)\}/.test(txt);
-                    const hasEq = txt.includes('=');
-
-                    if (hasFracMinus && hasEq) {
-                        // Cycle numerator subtraction first
-                        txt = txt.replace(/\\frac\{([^{}]+?)\s*-\s*([^{}]+?)\}/g, '\\frac{$2 - $1}');
-                    } else if (hasEq) {
-                        const eqParts = txt.split('=');
-                        if (eqParts.length === 2) {
-                            txt = `${eqParts[1].trim()} = ${eqParts[0].trim()}`;
-                        }
-                    } else if (hasFracMinus) {
-                        txt = txt.replace(/\\frac\{([^{}]+?)\s*-\s*([^{}]+?)\}/g, '\\frac{$2 - $1}');
-                    } else if (txt.includes(' - ')) {
-                        const parts = txt.split(' - ');
-                        if (parts.length === 2) txt = `${parts[1].trim()} - ${parts[0].trim()}`;
-                    }
-
-                    node.text = txt;
+                    node.text = flipNodeDirections(node);
                     renderMindMapDOMNodes();
                     renderAllLayers();
                     scheduleSavePage();
@@ -4143,6 +4258,17 @@
                                         categoryLabel: { type: "STRING", description: "برچسب کوتاه نوع شاخه (مثلاً: فرمول محاسباتی، واکنش، نکته، طبقه‌بندی)" },
                                         title: { type: "STRING", description: "متن یا فرمول شاخه اصلی (کسرها با \\frac{صورت}{مخرج} و زیروند شیمی با _{عدد})" },
                                         colorHex: { type: "STRING", description: "کد رنگ متمایز برای این شاخه (#2563EB آبی فرمول، #059669 سبز واکنش، #7C3AED بنفش مفهوم، #D97706 نارنجی نکته، #E11D48 قرمز هشدار)" },
+                                        placement: {
+                                            type: "OBJECT",
+                                            description: "فقط زمانی که صورت کسر یا طرفین تساوی/واکنش دو عملوند با یک عملگر وسطشان دارند. موقعیت مکانی هر عملوند را دقیق گزارش کن تا برنامه خودش ترتیب درست راست‌به‌چپ را بسازد.",
+                                            properties: {
+                                                rightOperand: { type: "STRING", description: "عملوندی که در تصویر دست‌خط سمت راست است (اول در چیدمان راست‌به‌چپ قرار می‌گیرد)" },
+                                                operator: { type: "STRING", description: "عملگر بین دو عملوند، دقیقاً یکی از: − + = → ⇌ ←" },
+                                                leftOperand: { type: "STRING", description: "عملوندی که در تصویر دست‌خط سمت چپ است" },
+                                                denominator: { type: "STRING", description: "مخرج کسر. اگر عبارت کسری نیست این را خالی بگذار." }
+                                            },
+                                            required: ["rightOperand", "operator", "leftOperand"]
+                                        },
                                         subBranches: {
                                             type: "ARRAY",
                                             items: { type: "STRING", description: "متن یا فرمول کامل زیرشاخه بدون حذف هیچ بخش از دست‌خط" }
@@ -4166,6 +4292,28 @@
                             explanation: { type: "STRING", description: "توضیح کوتاه و محترمانه دلیل علمی یا کنکوری این پیشنهاد" }
                         },
                         required: ["userWrote", "suggestedCorrection", "explanation"]
+                    }
+                },
+                structures: {
+                    type: "ARRAY",
+                    description: "فهرست ساختارهای دوبعدی موجود در دستخط (ساختار لوییس، حلقه، پیوند داتیو و هر شکل هندسی). برای هر ساختار، کادر مکانی دقیق آن روی تصویر را برگردان. اگر در تصویر هیچ ساختار دوبعدی نیست، این آرایه را خالی برگردان.",
+                    items: {
+                        type: "OBJECT",
+                        properties: {
+                            label: { type: "STRING", description: "برچسب کوتاه و دقیق ساختار، مثلاً «ساختار لوییس بنزن» یا «حلقهٔ سیکلوهکسان»" },
+                            box: {
+                                type: "OBJECT",
+                                description: "کادر ناحیهٔ ساختار روی تصویر دستخط. مختصات صحیح بین ۰ تا ۱۰۰۰ و نسبت به کل تصویر ارسالی.",
+                                properties: {
+                                    xmin: { type: "INTEGER", description: "فاصلهٔ لبهٔ راست ناحیه از لبهٔ راست تصویر (۰ تا ۱۰۰۰)" },
+                                    ymin: { type: "INTEGER", description: "فاصلهٔ لبهٔ بالای ناحیه از بالای تصویر (۰ تا ۱۰۰۰)" },
+                                    xmax: { type: "INTEGER", description: "فاصلهٔ لبهٔ چپ ناحیه از لبهٔ راست تصویر (۰ تا ۱۰۰۰ و بزرگ‌تر از xmin)" },
+                                    ymax: { type: "INTEGER", description: "فاصلهٔ لبهٔ پایین ناحیه از بالای تصویر (۰ تا ۱۰۰۰ و بزرگ‌تر از ymin)" }
+                                },
+                                required: ["xmin", "ymin", "xmax", "ymax"]
+                            }
+                        },
+                        required: ["label", "box"]
                     }
                 }
             },
@@ -4248,6 +4396,46 @@
             });
         }
 
+        /**
+         * Normalizes any minus-like operator to an ASCII hyphen so the fraction
+         * numerator renderer (which splits on ` - `) can always detect both operands.
+         * Returns null for anything unrecognized so a malformed `placement` can never
+         * corrupt an otherwise simple node.
+         */
+        function normalizeFormulaOperator(opRaw) {
+            const op = String(opRaw || '').trim();
+            if (!op) return null;
+            if (/^=+$/.test(op)) return '=';
+            if (op.includes('⇌')) return '⇌';
+            if (op.includes('→') || op.includes('->') || op.includes('\\rightarrow')) return '→';
+            if (op.includes('←') || op.includes('<-') || op.includes('\\leftarrow')) return '←';
+            if (op.includes('+')) return '+';
+            if (op.includes('-') || op.includes('−') || op.includes('–')) return '-';
+            return null;
+        }
+
+        /**
+         * Builds the final display string from Gemini's SPATIAL `placement` report.
+         * The renderer always draws the FIRST operand on the RIGHT, therefore the
+         * operand Gemini saw on the right of the paper is written first. This makes
+         * the left/right order deterministic and independent of Gemini's guesswork.
+         */
+        function composeFormulaFromPlacement(placement) {
+            if (!placement || typeof placement !== 'object') return null;
+            const right = String(placement.rightOperand || '').trim();
+            const left = String(placement.leftOperand || '').trim();
+            if (!right || !left) return null;
+
+            const op = normalizeFormulaOperator(placement.operator);
+            if (!op) return null;
+
+            const denominator = String(placement.denominator || '').trim();
+            const inner = `${right} ${op} ${left}`;
+
+            if (!denominator || op === '=') return inner;
+            return `\\frac{${inner}}{${denominator}}`;
+        }
+
         function populateMindMapFromGeminiTrees(treesArray, reviewsArray = []) {
             if (!Array.isArray(treesArray) || treesArray.length === 0) return;
             pushUndoState();
@@ -4287,7 +4475,7 @@
                         id: branchId,
                         parentId: rootId,
                         category: br.categoryLabel || 'شاخه اصلی',
-                        text: br.title || 'شاخه',
+                        text: composeFormulaFromPlacement(br.placement) || br.title || 'شاخه',
                         x: 0,
                         y: 0,
                         w: 155,
@@ -4322,6 +4510,275 @@
             autoLayoutMindMapTree(false);
         }
 
+        /**
+         * ============================================================================
+         * 13.1 2D STRUCTURE IMAGES (Lewis structures kept as real pictures, never flattened)
+         * ============================================================================
+         */
+
+        /** Lowest visible Y of the tree, so attached pictures can be parked neatly below it. */
+        function getMindMapTreeBottomY() {
+            const nodes = AppState.mindmapData.nodes || [];
+            let bottom = 0;
+            nodes.forEach(n => {
+                if (isMindMapNodeVisible(n, nodes)) {
+                    const b = (n.y || 0) + (n.h || 58);
+                    if (b > bottom) bottom = b;
+                }
+            });
+            return bottom;
+        }
+
+        /**
+         * Converts Gemini's normalized 0-1000 structure box into source pixel coordinates
+         * inside the rendered snapshot. Pure math (no canvas) so it stays unit-testable.
+         * NOTE: x is measured from the RIGHT edge, because the handwriting is RTL.
+         * Returns { sx, sy, sw, sh } or null when the box is unusable.
+         */
+        function structureBoxToSourceRect(snap, box) {
+            if (!snap || !box) return null;
+
+            const norm = (v) => {
+                const n = Number(v);
+                if (!Number.isFinite(n)) return null;
+                return Math.min(1000, Math.max(0, n));
+            };
+            const xmin = norm(box.xmin), ymin = norm(box.ymin);
+            const xmax = norm(box.xmax), ymax = norm(box.ymax);
+            if (xmin === null || ymin === null || xmax === null || ymax === null) return null;
+
+            // x comes from the right edge → convert to left-origin fractions
+            const leftFrac = 1 - (xmax / 1000);
+            const rightFrac = 1 - (xmin / 1000);
+            const topFrac = ymin / 1000;
+            const bottomFrac = ymax / 1000;
+
+            if (rightFrac - leftFrac < 0.02 || bottomFrac - topFrac < 0.02) return null;
+
+            const pad = 0.015;   // breathing room so no stroke gets clipped
+            const sx = Math.max(0, Math.floor((leftFrac - pad) * snap.cropW));
+            const sy = Math.max(0, Math.floor((topFrac - pad) * snap.cropH));
+            const sw = Math.min(snap.cropW - sx, Math.ceil((rightFrac - leftFrac + pad * 2) * snap.cropW));
+            const sh = Math.min(snap.cropH - sy, Math.ceil((bottomFrac - topFrac + pad * 2) * snap.cropH));
+            if (sw < 8 || sh < 8) return null;
+
+            return { sx, sy, sw, sh };
+        }
+
+        /**
+         * Crops the ALREADY RENDERED handwriting snapshot down to one 2D structure.
+         * Resolves to a PNG data URL, or null when the box is unusable.
+         */
+        function cropSnapshotToStructureBox(snap, box) {
+            if (!snap || !snap.base64) return Promise.resolve(null);
+            const rect = structureBoxToSourceRect(snap, box);
+            if (!rect) return Promise.resolve(null);
+            const { sx, sy, sw, sh } = rect;
+
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const SNAPSHOT_SCALE = 2;   // the snapshot is rendered at 2x
+                        const MAX_W = 900;          // keeps IndexedDB light
+                        let outW = sw * SNAPSHOT_SCALE;
+                        let outH = sh * SNAPSHOT_SCALE;
+                        if (outW > MAX_W) {
+                            outH = Math.max(1, Math.round(outH * (MAX_W / outW)));
+                            outW = MAX_W;
+                        }
+                        const c = document.createElement('canvas');
+                        c.width = outW;
+                        c.height = outH;
+                        const ctx = c.getContext('2d');
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, outW, outH);
+                        ctx.drawImage(
+                            img,
+                            sx * SNAPSHOT_SCALE, sy * SNAPSHOT_SCALE, sw * SNAPSHOT_SCALE, sh * SNAPSHOT_SCALE,
+                            0, 0, outW, outH
+                        );
+                        resolve(c.toDataURL('image/png'));
+                    } catch (_) {
+                        resolve(null);
+                    }
+                };
+                img.onerror = () => resolve(null);
+                img.src = 'data:image/png;base64,' + snap.base64;
+            });
+        }
+
+        /**
+         * Attaches one picture per detected 2D structure, parked below the tree.
+         * Never deletes or modifies the user's original handwriting.
+         */
+        async function attachStructureImages(structures, snap, recordUndo = true) {
+            const list = (Array.isArray(structures) ? structures : []).filter(st => st && st.label);
+            if (list.length === 0) return 0;
+
+            const cropped = [];
+            for (const st of list) {
+                const dataUrl = await cropSnapshotToStructureBox(snap, st.box);
+                if (dataUrl) cropped.push({ label: String(st.label).trim(), dataUrl });
+            }
+            if (cropped.length === 0) return 0;
+
+            if (recordUndo) pushUndoState();
+
+            const stageW = paperStage.clientWidth || 1450;
+            const cardW = 400;
+            const cardH = 280;
+            const x = Math.max(24, stageW - cardW - 60);
+            let y = getMindMapTreeBottomY() + 76;
+
+            cropped.forEach(c => {
+                AppState.mindmapData.images.push({
+                    id: uid(),
+                    x,
+                    y,
+                    w: cardW,
+                    h: cardH,
+                    dataUrl: c.dataUrl,
+                    label: c.label
+                });
+                y += cardH + 24;
+            });
+
+            renderMindMapImages();
+            scheduleSavePage();
+            return cropped.length;
+        }
+
+        /**
+         * Renders the attached 2D-structure pictures: draggable, resizable, deletable.
+         */
+        function renderMindMapImages() {
+            const container = document.getElementById('mindmap-images-layer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (AppState.workspaceMode !== 'mindmap') {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+
+            (AppState.mindmapData.images || []).forEach(imageObj => {
+                const card = document.createElement('div');
+                card.className = 'absolute bg-white border border-slate-300 rounded-xl shadow-sm flex flex-col overflow-hidden';
+                card.style.left = `${imageObj.x}px`;
+                card.style.top = `${imageObj.y}px`;
+                card.style.width = `${imageObj.w}px`;
+                card.style.height = `${imageObj.h}px`;
+                card.style.pointerEvents = AppState.mindmapFreeInkLock ? 'none' : 'auto';
+
+                // Header = drag handle + label + delete
+                const header = document.createElement('div');
+                header.className = 'flex items-center justify-between gap-1 px-2 py-1 bg-purple-50 border-b border-purple-100 text-[9px] cursor-grab shrink-0';
+
+                const labelEl = document.createElement('span');
+                labelEl.className = 'font-bold text-purple-800 truncate';
+                labelEl.textContent = `🖼 ${imageObj.label || 'ساختار دست‌نویس'}`;
+                header.appendChild(labelEl);
+
+                const btnDelete = document.createElement('button');
+                btnDelete.className = 'text-slate-400 hover:text-red-600 font-bold shrink-0';
+                btnDelete.textContent = '✕';
+                btnDelete.title = 'حذف این تصویر (دست‌خط اصلی دست‌نخورده می‌ماند)';
+                btnDelete.addEventListener('pointerdown', e => e.stopPropagation());
+                btnDelete.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    pushUndoState();
+                    AppState.mindmapData.images = AppState.mindmapData.images.filter(o => o.id !== imageObj.id);
+                    renderMindMapImages();
+                    scheduleSavePage();
+                });
+                header.appendChild(btnDelete);
+                card.appendChild(header);
+
+                const body = document.createElement('div');
+                body.className = 'flex-1 min-h-0 flex items-center justify-center bg-white p-1';
+                const imgEl = document.createElement('img');
+                imgEl.src = imageObj.dataUrl;
+                imgEl.draggable = false;
+                imgEl.alt = imageObj.label || 'ساختار دست‌نویس';
+                imgEl.className = 'max-w-full max-h-full object-contain select-none';
+                body.appendChild(imgEl);
+                card.appendChild(body);
+
+                // Resize handle (bottom-right corner)
+                const handle = document.createElement('div');
+                handle.className = 'absolute bottom-0 right-0 w-4 h-4 bg-purple-600/70 rounded-tl-lg';
+                handle.style.cursor = 'nwse-resize';
+                handle.title = 'تغییر اندازه';
+                card.appendChild(handle);
+
+                // Drag to move
+                let dragging = false, startX = 0, startY = 0, initX = 0, initY = 0;
+                header.addEventListener('pointerdown', (e) => {
+                    if (AppState.mindmapFreeInkLock) return;
+                    e.stopPropagation();
+                    dragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    initX = imageObj.x;
+                    initY = imageObj.y;
+                    try { header.setPointerCapture(e.pointerId); } catch (_) {}
+                });
+                header.addEventListener('pointermove', (e) => {
+                    if (!dragging) return;
+                    e.stopPropagation();
+                    const dx = (e.clientX - startX) / AppState.zoomScale;
+                    const dy = (e.clientY - startY) / AppState.zoomScale;
+                    imageObj.x = Math.max(8, Math.min(paperStage.clientWidth - 80, initX + dx));
+                    imageObj.y = Math.max(8, Math.min(paperStage.clientHeight - 60, initY + dy));
+                    card.style.left = `${imageObj.x}px`;
+                    card.style.top = `${imageObj.y}px`;
+                });
+                const endDrag = (e) => {
+                    if (!dragging) return;
+                    dragging = false;
+                    try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+                    scheduleSavePage();
+                };
+                header.addEventListener('pointerup', endDrag);
+                header.addEventListener('pointercancel', endDrag);
+
+                // Resize
+                let resizing = false, rsX = 0, rsY = 0, initW = 0, initH = 0;
+                handle.addEventListener('pointerdown', (e) => {
+                    if (AppState.mindmapFreeInkLock) return;
+                    e.stopPropagation();
+                    resizing = true;
+                    rsX = e.clientX;
+                    rsY = e.clientY;
+                    initW = imageObj.w;
+                    initH = imageObj.h;
+                    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+                });
+                handle.addEventListener('pointermove', (e) => {
+                    if (!resizing) return;
+                    e.stopPropagation();
+                    const dx = (e.clientX - rsX) / AppState.zoomScale;
+                    const dy = (e.clientY - rsY) / AppState.zoomScale;
+                    imageObj.w = Math.max(140, Math.min(900, initW + dx));
+                    imageObj.h = Math.max(110, Math.min(700, initH + dy));
+                    card.style.width = `${imageObj.w}px`;
+                    card.style.height = `${imageObj.h}px`;
+                });
+                const endResize = (e) => {
+                    if (!resizing) return;
+                    resizing = false;
+                    try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+                    scheduleSavePage();
+                };
+                handle.addEventListener('pointerup', endResize);
+                handle.addEventListener('pointercancel', endResize);
+
+                container.appendChild(card);
+            });
+        }
+
         async function runGeminiHandwritingAnalysis(targetAction = 'tree') {
             const loadingBox = document.getElementById('ai-loading-box');
             const loadingText = document.getElementById('ai-loading-text');
@@ -4343,20 +4800,24 @@
                 const systemPrompt = [
                     "تو یک طراح ارشد کنکور سراسری ایران (مسلط به خط‌به‌خط کتاب‌های درسی شیمی، زیست‌شناسی، فیزیک و ریاضی دهم، یازدهم و دوازدهم نظام جدید ایران) و متخصص OCR دست‌خط فارسی هستی.",
                     "قوانین حیاتی و غیرقابل تغییر که باید ۱۰۰٪ اجرا کنی:",
-                    "۱. وفاداری مطلق به ترتیب دست‌خط کاربر: تمام کلمات، صورت و مخرج کسرها، ضرایب و زیروندها را دقیقاً با همان ترتیبی که کاربر روی کاغذ نوشته استخراج کن و هرگز جای دو طرف تساوی یا منها را جابه‌جا نکن.",
-                    "۲. حفظ دقیق طرفین فرمول و تفریق‌ها:",
-                    "   - اگر کاربر در صورت کسر نوشته «C3H2 - استر»، در خروجی عیناً بنویس: \\frac{C_3H_2 - استر}{3}.",
-                    "   - اگر در صورت کسر نوشته «استر - C3H2»، عیناً بنویس: \\frac{استر - C_3H_2}{3}.",
-                    "   - اگر فرمول با کسر شروع شده و با مساوی تمام شده (مانند \\frac{...}{3} = اسید چرب)، دقیقاً همین ترتیب را بنویس و هرگز آن را به اسید چرب = ... تبدیل نکن.",
+                    "۱. وفاداری مطلق به دست‌خط: تمام کلمات، صورت و مخرج کسرها، ضرایب و زیروندها را بدون جا انداختن حتی یک نماد استخراج کن.",
+                    "۲. قانون طلایی موقعیت مکانی (مهم‌ترین قانون): وظیفه تو فقط «گزارش موقعیت مکانی» است؛ ترتیب نهایی راست‌به‌چپ را خودِ برنامه می‌چیند. پس هرگز خودت ترتیب دو طرف منها یا مساوی را در رشته نهایی حدس نزن.",
+                    "   - هر جا در دست‌خط دو عملوند با یک عملگر وسطشان نوشته شده (مثل «A − B» یا «A = B») و ترتیب اهمیت دارد، آن دو را در فیلد ساختاری «placement» بنویس، نه در رشتهٔ آزاد title.",
+                    "   - در placement: مقدار «rightOperand» = عملوندی که در تصویر سمت راست است و «leftOperand» = عملوندی که در تصویر سمت چپ است. این را با نگاه کردن به پیکسل‌های تصویر تعیین کن، نه با ترتیب خواندن.",
+                    "   - مثال تفریق کسری: روی کاغذ سمت راست «C3H2» و سمت چپ «استر» نوشته شده، بینشان منها و مخرج کسر «۳» است → placement = { rightOperand: \"C_3H_2\", operator: \"−\", leftOperand: \"استر\", denominator: \"3\" }",
+                    "   - مثال تساوی: سمت راست «کسر» و سمت چپ «اسید چرب» → placement = { rightOperand: \"\\\\frac{...}{3}\", operator: \"=\", leftOperand: \"اسید چرب\" }",
+                    "   - مثال واکنش: سمت راست «محصول» و سمت چپ «واکنش‌دهنده» → placement = { rightOperand: \"محصول\", operator: \"→\", leftOperand: \"واکنش‌دهنده\" }",
+                    "   - فیلد «title» را همیشه پر کن (متن سادهٔ همان شاخه)؛ اگر placement معتبر باشد برنامه خودش آن را جایگزین می‌کند.",
                     "۳. فرمت استاندارد فرمول‌های شیمی و ریاضی:",
-                    "   - کسرها را حتماً با \\frac{صورت}{مخرج} بنویس.",
+                    "   - کسرها را در فیلدهای آزاد (title و subBranches) حتماً با \\frac{صورت}{مخرج} بنویس.",
                     "   - در فرمول‌های شیمیایی، زیروند هر عنصر را فقط برای عدد همان عنصر بگذار (مانند C_3H_8O_3 یا C_8H_{18} یا C_{57}H_{104}O_6 یا 3H_2O یا CH_3-C(=O)-CH_3) و هرگز چند عنصر را داخل یک زیروند نبر.",
-                    "۴. بررسی علمی فقط و فقط طبق «کتاب‌های درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی):",
+                    "۴. ساختارهای دوبعدی (لوییس، حلقه، پیوند، شکل هندسی): اگر در دست‌خط ساختار لوییس، حلقهٔ بنزنی، پیوند داتیو یا هر شکل دوبعدی کشیده شده، هرگز آن را به یک خط متن تبدیل نکن (این کار ساختار را کاملاً خراب می‌کند). در آن صورت: فیلد placement را خالی بگذار، در title فقط یک برچسب کوتاه و دقیق مثل «ساختار لوییس بنزن (تصویر دست‌خط حفظ شده است)» بنویس، و در scientificReviews یک مورد با explanation توضیح بده که این بخش برای حفظ دقت به‌صورت تصویر نگه داشته شده است.",
+                    "۵. بررسی علمی فقط و فقط طبق «کتاب‌های درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی):",
                     "   - معیار علمی تو در آرایه scientificReviews باید ۱۰۰٪ منطبق بر کتاب‌های رسمی درسی آموزش و پرورش ایران و تست‌های کنکور باشد.",
                     "   - اگر دانش‌آموز فرمولی را مغایر با کتاب رسمی نوشته بود، در نمودار دست نزن بلکه در scientificReviews دلیلش را توضیح بده تا خودش با یک کلیک تصمیم بگیرد."
                 ].join("\n");
 
-                const userPrompt = "لطفاً تمام نوشته‌ها و فرمول‌های ریاضی و شیمی داخل این تصویر را با حفظ دقیق ترتیب نوشتاری دست‌خط من (بدون تغییر جای طرفین منها و مساوی) استخراج کن، به درختواره فرمولی تبدیل کن و نکات لازم را در scientificReviews بیاور.";
+                const userPrompt = "لطفاً تمام نوشته‌ها و فرمول‌های ریاضی و شیمی داخل این تصویر را دقیق استخراج کن، به درختوارهٔ فرمولی تبدیل کن و نکات لازم را در scientificReviews بیاور. برای هر عبارت دوعملوندی (منها، تساوی یا واکنش) جای هر عملوند را در تصویر تشخیص بده و در فیلد placement گزارش کن؛ ترتیب نهایی را خودت در رشته تعیین نکن.";
 
                 const payload = {
                     contents: [{
@@ -4399,14 +4860,29 @@
                     clearSelection();
                 }
 
-                if (targetAction === 'tree' && parsed.trees && parsed.trees.length > 0) {
-                    // If user wrote in Planner tab and didn't check "clear ink", also copy their handwriting into Mind-Map below the tree so they can see both!
-                    if (!shouldClearInk && snap.sourceType === 'planner' && AppState.mindmapData.strokes.length === 0) {
-                        AppState.mindmapData.strokes = JSON.parse(JSON.stringify(AppState.plannerData.strokes));
+                if (targetAction === 'tree') {
+                    const hasTrees = Array.isArray(parsed.trees) && parsed.trees.length > 0;
+
+                    if (hasTrees) {
+                        // If the user didn't ask to clear the raw ink, keep their handwriting in the
+                        // Mind-Map too, so 2D drawings (Lewis structures etc.) are never lost.
+                        if (!shouldClearInk && snap.sourceType === 'planner' && AppState.mindmapData.strokes.length === 0) {
+                            AppState.mindmapData.strokes = JSON.parse(JSON.stringify(AppState.plannerData.strokes));
+                        }
+                        populateMindMapFromGeminiTrees(parsed.trees, parsed.scientificReviews || []);
                     }
-                    populateMindMapFromGeminiTrees(parsed.trees, parsed.scientificReviews || []);
-                    loadingBox.classList.add('hidden');
-                    document.getElementById('modal-ai-gemini').classList.add('hidden');
+
+                    // 2D structures (Lewis structures, rings, …) are attached as REAL PICTURES
+                    // instead of being flattened into broken one-line text.
+                    const attachedCount = await attachStructureImages(parsed.structures || [], snap, !hasTrees);
+
+                    if (hasTrees || attachedCount > 0) {
+                        if (!hasTrees && AppState.workspaceMode !== 'mindmap') switchWorkspaceMode('mindmap');
+                        loadingBox.classList.add('hidden');
+                        document.getElementById('modal-ai-gemini').classList.add('hidden');
+                    } else {
+                        loadingText.textContent = 'تحلیل انجام شد.';
+                    }
                 } else if (targetAction === 'text' && cleanText) {
                     pushUndoState();
                     AppState.texts.push({
@@ -4656,6 +5132,7 @@
             addMindMapChildNode(AppState.selectedMindmapNodeId);
         });
         document.getElementById('btn-mm-auto-layout').addEventListener('click', () => autoLayoutMindMapTree(true));
+        document.getElementById('btn-mm-flip-all').addEventListener('click', flipEntireMindMapTree);
         document.getElementById('btn-mm-toggle-ink').addEventListener('click', () => {
             AppState.mindmapFreeInkLock = !AppState.mindmapFreeInkLock;
             const lbl = document.getElementById('label-mm-ink-mode');
@@ -4781,6 +5258,7 @@
             AppState.mindmapData = {
                 nodes: (saved && saved.mindmapNodes) ? saved.mindmapNodes : [],
                 reviews: (saved && saved.mindmapReviews) ? saved.mindmapReviews : [],
+                images: (saved && saved.mindmapImages) ? saved.mindmapImages : [],
                 strokes: (saved && saved.mindmapStrokes) ? saved.mindmapStrokes : [],
                 texts: (saved && saved.mindmapTexts) ? saved.mindmapTexts : [],
                 symbols: (saved && saved.mindmapSymbols) ? saved.mindmapSymbols : []
