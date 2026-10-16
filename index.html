@@ -615,7 +615,7 @@
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><path d="M10 6.5h4"></path><path d="M12 6.5v11h2"></path></svg>
                 <span>مرتب‌سازی هوشمند درخت</span>
             </button>
-            <button id="btn-mm-flip-all" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-md text-[11px] font-medium flex items-center gap-1 shrink-0 transition" title="اگر هوش مصنوعی جهت فرمول‌ها را برعکس خواند، با یک کلیک جهت همهٔ فرمول‌های این صفحه را برگردان">
+            <button id="btn-mm-flip-all" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-md text-[11px] font-medium flex items-center gap-1 shrink-0 transition touch-manipulation" title="اگر هوش مصنوعی جهت فرمول‌ها را برعکس خواند، با یک کلیک جهت همهٔ فرمول‌های این صفحه را برگردان">
                 <span>⇄ برگرداندن جهت همهٔ فرمول‌ها</span>
             </button>
             <button id="btn-mm-ai-handwriting" class="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-[11px] font-bold flex items-center gap-1 shrink-0 shadow-sm transition" title="خواندن دقیق دست‌خط و فرمول‌ها با Gemini 3.8 Flash و ساخت درختواره رنگی">
@@ -1051,7 +1051,14 @@
                         <button id="btn-copy-ai-text" class="text-[11px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-700">کپی متن</button>
                     </div>
                     <div id="ai-recognized-text" class="p-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 leading-relaxed select-text max-h-44 overflow-y-auto"></div>
+
+                    <details class="mt-1 text-[10px] text-slate-500">
+                        <summary class="cursor-pointer select-none">🔍 پاسخ خام مدل (برای عیب‌یابی)</summary>
+                        <pre id="ai-debug-json" class="mt-1 p-2 bg-slate-50 border border-slate-200 rounded text-[9px] overflow-auto max-h-40 select-text" style="direction:ltr;text-align:left;white-space:pre-wrap;"></pre>
+                    </details>
                 </div>
+
+                <div id="app-build-stamp" class="text-[9px] text-slate-400 text-center pt-1 select-text"></div>
             </div>
         </div>
     </div>
@@ -2499,7 +2506,7 @@
 
                 // Flip Formula Direction Button (⇄) for instant RTL/LTR equation or subtraction swap
                 const btnFlip = document.createElement('button');
-                btnFlip.className = 'px-1.5 py-0.2 bg-white/80 hover:bg-purple-50 text-purple-700 border border-slate-200 rounded font-bold transition text-[11px]';
+                btnFlip.className = 'px-1.5 py-0.2 bg-white/80 hover:bg-purple-50 text-purple-700 border border-slate-200 rounded font-bold transition text-[11px] touch-manipulation';
                 btnFlip.title = 'چرخش جهات فرمول (جابه‌جایی دو طرف مساوی یا منها)';
                 btnFlip.textContent = '⇄';
                 btnFlip.addEventListener('pointerdown', e => e.stopPropagation());
@@ -4621,7 +4628,14 @@
                 const dataUrl = await cropSnapshotToStructureBox(snap, st.box);
                 if (dataUrl) cropped.push({ label: String(st.label).trim(), dataUrl });
             }
-            if (cropped.length === 0) return 0;
+
+            // Safety net: the AI said a 2D structure exists but gave no usable box.
+            // Never lose the drawing — fall back to the full handwriting snapshot.
+            if (cropped.length === 0) {
+                const fullSnap = await cropSnapshotToStructureBox(snap, { xmin: 0, ymin: 0, xmax: 1000, ymax: 1000 });
+                if (!fullSnap) return 0;
+                cropped.push({ label: String(list[0].label).trim() || 'تصویر دست‌خط', dataUrl: fullSnap });
+            }
 
             if (recordUndo) pushUndoState();
 
@@ -4784,6 +4798,7 @@
             const loadingText = document.getElementById('ai-loading-text');
             const resultContainer = document.getElementById('ai-result-container');
             const recognizedTextBox = document.getElementById('ai-recognized-text');
+            const debugBox = document.getElementById('ai-debug-json');
 
             const snap = captureHandwritingSnapshotBase64();
             if (!snap) {
@@ -4795,6 +4810,7 @@
             loadingBox.classList.remove('hidden');
             loadingText.textContent = `در حال واکاوی دقیق دست‌خط و فرمول‌ها توسط ${selectedGeminiModel}...`;
             resultContainer.classList.add('hidden');
+            if (debugBox) debugBox.textContent = '';
 
             try {
                 const systemPrompt = [
@@ -4811,7 +4827,11 @@
                     "۳. فرمت استاندارد فرمول‌های شیمی و ریاضی:",
                     "   - کسرها را در فیلدهای آزاد (title و subBranches) حتماً با \\frac{صورت}{مخرج} بنویس.",
                     "   - در فرمول‌های شیمیایی، زیروند هر عنصر را فقط برای عدد همان عنصر بگذار (مانند C_3H_8O_3 یا C_8H_{18} یا C_{57}H_{104}O_6 یا 3H_2O یا CH_3-C(=O)-CH_3) و هرگز چند عنصر را داخل یک زیروند نبر.",
-                    "۴. ساختارهای دوبعدی (لوییس، حلقه، پیوند، شکل هندسی): اگر در دست‌خط ساختار لوییس، حلقهٔ بنزنی، پیوند داتیو یا هر شکل دوبعدی کشیده شده، هرگز آن را به یک خط متن تبدیل نکن (این کار ساختار را کاملاً خراب می‌کند). در آن صورت: فیلد placement را خالی بگذار، در title فقط یک برچسب کوتاه و دقیق مثل «ساختار لوییس بنزن (تصویر دست‌خط حفظ شده است)» بنویس، و در scientificReviews یک مورد با explanation توضیح بده که این بخش برای حفظ دقت به‌صورت تصویر نگه داشته شده است.",
+                    "۴. ساختارهای دوبعدی (لوییس، حلقه، پیوند، شکل هندسی): اگر در دست‌خط ساختار لوییس، حلقهٔ بنزنی، پیوند داتیو یا هر شکل دوبعدی کشیده شده، هرگز آن را به یک خط متن تبدیل نکن (این کار ساختار را کاملاً خراب می‌کند). در آن صورت:",
+                    "   - فیلد placement را خالی بگذار، در title فقط یک برچسب کوتاه و دقیق مثل «ساختار لوییس بنزن» بنویس، و در scientificReviews یک مورد با explanation توضیح بده که این بخش برای حفظ دقت به‌صورت تصویر نگه داشته شده است.",
+                    "   - الزامی: برای هر ساختار دوبعدی یک عضو در آرایهٔ «structures» اضافه کن که دو فیلد دارد: label (برچسب کوتاه همان ساختار) و box (کادر دقیق آن ساختار روی تصویر). اگر ساختار را در structures نگذاری، آن شکل برای کاربر کاملاً از بین می‌رود.",
+                    "   - box باید چهار عدد صحیح بین ۰ تا ۱۰۰۰ داشته باشد و نسبت به کل تصویر ارسالی باشد: xmin = فاصلهٔ لبهٔ راستِ ناحیه از لبهٔ راست تصویر، ymin = فاصلهٔ لبهٔ بالای ناحیه از بالای تصویر، xmax = فاصلهٔ لبهٔ چپ‌ترِ ناحیه از لبهٔ راست تصویر (باید از xmin بزرگ‌تر باشد)، ymax = فاصلهٔ لبهٔ پایین ناحیه از بالای تصویر (باید از ymin بزرگ‌تر باشد). توجه: محور افقی از سمت راست شمرده می‌شود چون دست‌خط فارسی است.",
+                    "   - مثال: اگر ساختار لوییس در گوشهٔ بالا-راست تصویر باشد، box = { xmin: 30, ymin: 40, xmax: 420, ymax: 380 }. اگر هیچ ساختار دوبعدی در تصویر نیست، structures را آرایهٔ خالی [] بگذار.",
                     "۵. بررسی علمی فقط و فقط طبق «کتاب‌های درسی دبیرستان و کنکور سراسری ایران» (نه شیمی دانشگاهی):",
                     "   - معیار علمی تو در آرایه scientificReviews باید ۱۰۰٪ منطبق بر کتاب‌های رسمی درسی آموزش و پرورش ایران و تست‌های کنکور باشد.",
                     "   - اگر دانش‌آموز فرمولی را مغایر با کتاب رسمی نوشته بود، در نمودار دست نزن بلکه در scientificReviews دلیلش را توضیح بده تا خودش با یک کلیک تصمیم بگیرد."
@@ -4844,6 +4864,7 @@
                 if (!rawJson) throw new Error('پاسخی از مدل دریافت نشد.');
 
                 const parsed = JSON.parse(rawJson);
+                if (debugBox) debugBox.textContent = JSON.stringify(parsed, null, 1);
                 const cleanText = (parsed.recognizedText || '').trim();
 
                 recognizedTextBox.innerHTML = renderFormattedMathAndChem(cleanText || 'متنی تشخیص داده نشد.');
@@ -5133,6 +5154,23 @@
         });
         document.getElementById('btn-mm-auto-layout').addEventListener('click', () => autoLayoutMindMapTree(true));
         document.getElementById('btn-mm-flip-all').addEventListener('click', flipEntireMindMapTree);
+
+        // ------------------------------------------------------------------
+        // Build stamp — tells the user (and me) which version is REALLY running on
+        // the device, so a stale browser cache can never be mistaken for a bug.
+        // ------------------------------------------------------------------
+        const APP_BUILD = {
+            version: 2,
+            date: '2026-10-16',
+            features: 'placement-order + structure-images + debug'
+        };
+        (function initBuildStamp() {
+            const stampEl = document.getElementById('app-build-stamp');
+            if (stampEl) {
+                stampEl.textContent = `نسخهٔ ${toPersianDigits(APP_BUILD.version)} · ${APP_BUILD.date} · ${APP_BUILD.features}`;
+            }
+            window.__BUILD_INFO = APP_BUILD;
+        })();
         document.getElementById('btn-mm-toggle-ink').addEventListener('click', () => {
             AppState.mindmapFreeInkLock = !AppState.mindmapFreeInkLock;
             const lbl = document.getElementById('label-mm-ink-mode');
