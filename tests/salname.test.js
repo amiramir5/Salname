@@ -63,6 +63,7 @@ const FN_NAMES = [
     'getFlipOperations',
     'flipNodeDirections',
     'structureBoxToSourceRect',
+    'isTinyMark',
     'groupStrokesIntoBlocks',
     'assignHandwritingParents'
 ];
@@ -73,6 +74,7 @@ const {
     composeFormulaFromPlacement,
     flipNodeDirections,
     structureBoxToSourceRect,
+    isTinyMark,
     groupStrokesIntoBlocks,
     assignHandwritingParents
 } = factory();
@@ -282,8 +284,40 @@ console.log('\n--- 7. pen / eraser input surface ---');
 // The interaction layer must use the same DPI mapping as the ink layer. Drawing it 1:1
 // made live strokes look softer and slightly fatter than the committed ones.
 ok('interaction canvas is device-pixel scaled like the ink layer',
-    html.includes('canvasInteraction.width = rect.width * dpr;') &&
+    html.includes('canvasInteraction.width = layoutW * dpr;') &&
     html.includes('ctxInteraction.setTransform(dpr, 0, 0, dpr, 0, 0);'));
+
+// The layer backing stores must be sized from the paper's LAYOUT size. `getBoundingClientRect()`
+// reports zoomed pixels: sizing from it made the bitmaps change size with the zoom, so the ink
+// was squeezed into part of the page and the clear-rects no longer covered the layers (which is
+// how the pen cursor left an endless trail of dots down the right-hand side of the page).
+ok('no layer is sized from the zoomed rect',
+    !/c\.width = rect\.width|canvasInteraction\.width = rect\.width/.test(html) &&
+    html.includes('const layoutW = paperStage.clientWidth'));
+ok('layers are cleared in paper units, never in zoomed pixels',
+    html.includes('function clearLayer(ctx)') &&
+    !/clearRect\(0, 0, cachedCanvasRect\.width/.test(html));
+ok('the eraser repaints once per frame instead of once per sample',
+    html.includes('function requestEraseRepaint') && html.includes('function eraseFlushRepaint') &&
+    html.includes('eraseFlushRepaint();'));
+ok('the live stroke is smoothed with the same curve as the committed one',
+    /function drawIncrementalSegments[\s\S]*?quadraticCurveTo/.test(html));
+ok('the cursor preview clears only its own trail',
+    html.includes('function clearCursorTrail') &&
+    !/function drawPenCursorPreview[\s\S]{0,400}clearLayer\(ctxInteraction\)/.test(html));
+
+// "Like Edge": the stylus tip must feel like it comes out from under the nib. Chromium can say
+// where the pen is ABOUT to be; drawing that tail and wiping it on the next real sample hides the
+// input latency. Only real samples may ever be committed to the stroke.
+ok('the pen prediction is drawn but never committed',
+    html.includes('function drawPredictedTail') &&
+    html.includes('clearPredictionTrail();') &&
+    !/drawPredictedTail[\s\S]{0,900}currentRawPoints\.push/.test(html));
+ok('a wild prediction cannot run away',
+    /Math\.hypot\(p\.x - lastReal\.x, p\.y - lastReal\.y\) > 60/.test(html));
+ok('the predicted tail is wiped from every path that repaints the layer',
+    /function clearLayer\(ctx\)[\s\S]{0,240}predictionBox = null/.test(html) &&
+    /penCursorAt = null;\s*\n\s*eraserRingAt = null;\s*\n\s*predictionBox = null;/.test(html));
 
 // Ring size and erase size must never drift apart — they share ERASER_RADIUS.
 ok('the eraser ring uses the shared radius',
@@ -410,6 +444,38 @@ check('those ids are unique', new Set(nested.map(b => b.id)).size, 4);
 const flat = assignHandwritingParents([hwBlock(400), hwBlock(400), hwBlock(400)]);
 check('a flat page still yields a tree (first block becomes the root)',
     flat.map(b => b.parentId), [null, flat[0].id, flat[0].id]);
+
+// "A dot / a dash can never be an item of its own." Both dimensions have to be small: a written
+// word is a LONG box, and a short number such as «۱۲» is as TALL as the rest of the writing.
+check('a small round dot is a mark', isTinyMark(18, 18, 30), true);
+check('a short dash is a mark', isTinyMark(40, 8, 30), true);
+check('a written word is never a mark', isTinyMark(206, 30, 30), false);
+check('a short but full-height number is never a mark', isTinyMark(40, 30, 30), false);
+check('a lone letter keeps its own item', isTinyMark(22, 27, 30), false);
+check('an empty box cannot crash the test', isTinyMark(0, 0, 0), true);
+
+// A dot drawn well to the RIGHT of its word (a bullet at the start of an RTL line). The wide gap
+// used to open a card of its own, and — being the right-most block on an RTL page — the dot then
+// became the ROOT of the tree with the real line hanging underneath it.
+const dotOffToTheSide = groupStrokesIntoBlocks([
+    hwWord('word', 300, 200, 200),
+    hwDotR('dot', 620, 200, 6)
+]);
+check('a dot far to the side of its word stays in that word\'s card', dotOffToTheSide.length, 1);
+check('...and the card holds both the word and the dot', dotOffToTheSide[0].strokes.length, 2);
+
+// The user's exact scenario: one line of writing, two subgroups indented under it, plus a stray
+// dot parked to the right of the first line. The dot must not become the root.
+const hwMark = (x1) => ({ x0: x1 - 12, x1, y0: 0, y1: 6, strokes: [] });
+const withStrayDot = assignHandwritingParents([
+    hwMark(432), hwBlock(400), hwBlock(360), hwBlock(360)
+]);
+check('a stray dot is never the root', withStrayDot[1].parentId, null);
+check('...the flush-right line is the root instead', withStrayDot[0].parentId, withStrayDot[1].id);
+check('the first subgroup hangs under the root', withStrayDot[2].parentId, withStrayDot[1].id);
+check('the second subgroup is its sibling, not its child', withStrayDot[3].parentId, withStrayDot[1].id);
+check('...so the root ends up with two children',
+    withStrayDot.filter(b => b.parentId === withStrayDot[1].id).length, 3);
 
 ok('the "tree from my own handwriting" button exists', html.includes('id="btn-mm-from-ink"'));
 ok('it is bound to the builder',

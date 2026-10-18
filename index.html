@@ -128,7 +128,14 @@
             width: 1450px;
             min-width: 100%;
             height: 1950px;
-            transform-origin: 0 0;
+            /* Zoom is applied with the CSS `zoom` property, NOT `transform: scale()`.
+               `transform` does not change an element's LAYOUT size, so the scroller still
+               believed the paper was 1450x1950 while it was visually 2900x3900: everything
+               past the unscaled edge was unreachable, and in RTL the growth went the wrong
+               way entirely, so zooming in cut off the right half of the page with no way to
+               scroll to it. `zoom` participates in layout, so the scroller sizes itself
+               correctly in both axes, and `getBoundingClientRect()` still reports visual
+               pixels, which is exactly what getCanvasPoint() expects. */
             touch-action: none !important;
             -ms-touch-action: none !important;
             -webkit-user-drag: none;
@@ -1904,6 +1911,15 @@
         let dpr = Math.min(window.devicePixelRatio || 1, 2);
         let cachedCanvasRect = { left: 0, top: 0, width: 1000, height: 1850 };
 
+        // Where the hover writing-point / eraser ring were last drawn, in PAPER units. They are
+        // used to erase just the little trail the cursor left behind instead of repainting the
+        // whole page on every stylus sample.
+        let penCursorAt = null;
+        let eraserRingAt = null;
+        // Box (paper units) of the drawn pen prediction, so it can be wiped on the next real
+        // sample instead of accumulating. See drawPredictedTail.
+        let predictionBox = null;
+
         // Eraser size, in CSS pixels. One constant drives BOTH the erase hit-test and the
         // on-screen ring, so the circle you see is exactly the area that gets erased.
         // Lower it to erase more finely, raise it to erase faster.
@@ -1922,27 +1938,50 @@
          */
         function resizeCanvases() {
             dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2);
-            const rect = paperStage.getBoundingClientRect();
-            cachedCanvasRect = rect;
+            // The BACKING STORE must never follow the zoom. `getBoundingClientRect()` reports
+            // visual (zoomed) pixels, so sizing the layers from it made every layer change size
+            // when the user zoomed: the paper coordinate space stayed 1450 wide while the bitmap
+            // became 1450*zoom wide, so the ink was squeezed into a fraction of the page and the
+            // clear-rects (also taken from the visual rect) no longer matched the canvas — the
+            // pen cursor then left an endless trail of dots on the part that was never cleared.
+            // The LAYOUT size is fixed in paper units, which is exactly what these contexts are
+            // scaled for, so the mapping is identical at every zoom level.
+            const layoutW = paperStage.clientWidth || 1450;
+            const layoutH = paperStage.clientHeight || 1950;
+            cachedCanvasRect = paperStage.getBoundingClientRect();
 
             // High-DPI static canvases for crisp handwriting quality
             [canvasPdf, canvasHighlighter, canvasInk].forEach(c => {
-                c.width = rect.width * dpr;
-                c.height = rect.height * dpr;
+                c.width = layoutW * dpr;
+                c.height = layoutH * dpr;
                 const ctx = c.getContext('2d');
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             });
 
             // Live interaction canvas — same mapping as the static layers, so what you see
             // while writing is pixel-for-pixel what gets committed on pen-up.
-            canvasInteraction.width = rect.width * dpr;
-            canvasInteraction.height = rect.height * dpr;
+            canvasInteraction.width = layoutW * dpr;
+            canvasInteraction.height = layoutH * dpr;
             ctxInteraction.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctxInteraction.lineCap = 'round';
             ctxInteraction.lineJoin = 'round';
 
             renderPdfBackground();
             renderAllLayers();
+        }
+
+        /**
+         * Clears a drawing layer in PAPER units.
+         *
+         * Never clear with `cachedCanvasRect`: that rectangle is in visual (zoomed) pixels, so
+         * once the zoom dropped below 100% the cleared area was smaller than the layer and
+         * everything drawn outside it stayed on screen forever. That is exactly how the pen
+         * cursor ended up leaving an endless trail of black dots down the right-hand side of the
+         * page, and why the eraser ring seemed to "stick" to the pen without anything happening.
+         */
+        function clearLayer(ctx) {
+            if (ctx === ctxInteraction) { penCursorAt = null; eraserRingAt = null; predictionBox = null; }
+            ctx.clearRect(0, 0, paperStage.clientWidth || 1450, paperStage.clientHeight || 1950);
         }
 
         window.addEventListener('resize', resizeCanvases);
@@ -1959,7 +1998,12 @@
          */
         function applyZoomScale(newZoom) {
             AppState.zoomScale = Math.min(2.2, Math.max(0.45, newZoom));
-            paperStage.style.transform = `scale(${AppState.zoomScale})`;
+            // `zoom`, never `transform: scale()`. A transform leaves the layout size untouched, so
+            // the scroller could not reach the zoomed part of the page at all — see #paper-stage.
+            // `zoom` also keeps getBoundingClientRect() in visual pixels, which is what
+            // getCanvasPoint() divides by zoomScale to get paper coordinates.
+            paperStage.style.transform = '';
+            paperStage.style.zoom = AppState.zoomScale;
             const btnReset = document.getElementById('btn-zoom-reset');
             if (btnReset) {
                 btnReset.textContent = `${toPersianDigits(Math.round(AppState.zoomScale * 100))}٪`;
@@ -2294,6 +2338,11 @@
             ctxHighlighter.clearRect(0, 0, w, h);
             ctxInk.clearRect(0, 0, w, h);
             ctxInteraction.clearRect(0, 0, w, h);
+            // The interaction layer was wiped, so the cursor trail trackers must forget where
+            // they were — otherwise the next hover would try to clear an already-empty box.
+            penCursorAt = null;
+            eraserRingAt = null;
+            predictionBox = null;
 
             // 1. In Planner Mode, draw right schedule margin; in Mind-Map mode, draw smooth Bezier tree connectors
             if (AppState.workspaceMode === 'planner') {
@@ -3402,15 +3451,98 @@
                 }
             }
 
-            const start = Math.max(0, fromIdx - 1);
-            ctxInteraction.moveTo(pts[start].x, pts[start].y);
-            for (let i = start + 1; i < pts.length; i++) {
-                ctxInteraction.lineTo(pts[i].x, pts[i].y);
+            // The live preview used to join the hardware samples with straight lines, so the ink
+            // looked angular and "cheap" WHILE writing and only became smooth after the pen was
+            // lifted (when the committed stroke was redrawn). Now the live stroke is smoothed the
+            // same way the committed one is — quadratic curves through the midpoints of the
+            // samples — so what you write is what you keep. The last couple of segments are
+            // redrawn on each batch and simply overdraw themselves, which is invisible with the
+            // solid pen colours.
+            const first = Math.max(0, fromIdx - 2);
+            if (first === 0) {
+                ctxInteraction.moveTo(pts[0].x, pts[0].y);
+            } else {
+                ctxInteraction.moveTo(
+                    (pts[first - 1].x + pts[first].x) / 2,
+                    (pts[first - 1].y + pts[first].y) / 2
+                );
             }
+            for (let i = first; i < pts.length - 1; i++) {
+                ctxInteraction.quadraticCurveTo(
+                    pts[i].x, pts[i].y,
+                    (pts[i].x + pts[i + 1].x) / 2,
+                    (pts[i].y + pts[i + 1].y) / 2
+                );
+            }
+            const tail = pts[pts.length - 1];
             if (predictedPt) {
-                ctxInteraction.lineTo(predictedPt.x, predictedPt.y);
+                ctxInteraction.quadraticCurveTo(tail.x, tail.y, predictedPt.x, predictedPt.y);
+            } else {
+                ctxInteraction.lineTo(tail.x, tail.y);
             }
             ctxInteraction.stroke();
+        }
+
+        /**
+         * Chromium can tell us where the pen is ABOUT to be (`getPredictedEvents`). Drawing that
+         * short tail — and wiping it again as soon as the next real sample lands — is what makes
+         * the ink appear to come out from under the nib instead of trailing a few milliseconds
+         * behind it. This is the same idea Microsoft's ink stack uses, and it is the single
+         * biggest reason a stylus feels "instant" rather than "laggy".
+         *
+         * The predicted points are NEVER pushed into the stroke: only real hardware samples are
+         * committed, so a wrong guess can only ever be a brief visual overshoot.
+         */
+        function clearPredictionTrail() {
+            if (!predictionBox) return;
+            ctxInteraction.clearRect(predictionBox.x, predictionBox.y, predictionBox.w, predictionBox.h);
+            predictionBox = null;
+        }
+        function drawPredictedTail(e) {
+            if (typeof e.getPredictedEvents !== 'function') return;
+            let predicted = [];
+            try {
+                predicted = e.getPredictedEvents() || [];
+            } catch (_) {
+                return;
+            }
+            if (predicted.length === 0) return;
+
+            const pts = AppState.currentRawPoints;
+            if (pts.length === 0) return;
+            const lastReal = pts[pts.length - 1];
+
+            // At most three points, and never more than 60 paper pixels ahead: a wild guess would
+            // be worse than no prediction at all.
+            const tail = [{ x: lastReal.x, y: lastReal.y }];
+            const maxPred = Math.min(3, predicted.length);
+            for (let i = 0; i < maxPred; i++) {
+                const p = getCanvasPoint(predicted[i]);
+                if (Math.hypot(p.x - lastReal.x, p.y - lastReal.y) > 60) break;
+                tail.push(p);
+            }
+            if (tail.length < 2) return;
+
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+            tail.forEach(p => {
+                if (p.x < x0) x0 = p.x;
+                if (p.y < y0) y0 = p.y;
+                if (p.x > x1) x1 = p.x;
+                if (p.y > y1) y1 = p.y;
+            });
+            const pad = (ctxInteraction.lineWidth || 3) + 8;
+            predictionBox = { x: x0 - pad, y: y0 - pad, w: (x1 - x0) + pad * 2, h: (y1 - y0) + pad * 2 };
+
+            ctxInteraction.save();
+            ctxInteraction.beginPath();
+            ctxInteraction.moveTo(tail[0].x, tail[0].y);
+            for (let i = 1; i < tail.length; i++) {
+                const midX = (tail[i].x + (tail[i + 1] ? tail[i + 1].x : tail[i].x)) / 2;
+                const midY = (tail[i].y + (tail[i + 1] ? tail[i + 1].y : tail[i].y)) / 2;
+                ctxInteraction.quadraticCurveTo(tail[i].x, tail[i].y, midX, midY);
+            }
+            ctxInteraction.stroke();
+            ctxInteraction.restore();
         }
 
         function renderInteractionOverlay() {
@@ -3572,7 +3704,7 @@
             e.stopPropagation();
             cachedCanvasRect = paperStage.getBoundingClientRect();
             // Wipe the hover pen dot so it never sits on top of the stroke we are starting.
-            ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+            clearLayer(ctxInteraction);
             try {
                 if (canvasInteraction.setPointerCapture) {
                     canvasInteraction.setPointerCapture(e.pointerId);
@@ -3685,7 +3817,7 @@
                 if (AppState.activeTool === 'shape' || AppState.straightLineMode) {
                     renderInteractionOverlay();
                 } else {
-                    ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+                    clearLayer(ctxInteraction);
                     drawIncrementalSegments(0);
                     AppState.lastRenderedIndex = 1;
                 }
@@ -3754,8 +3886,11 @@
                 for (let i = 0; i < events.length; i++) {
                     AppState.currentRawPoints.push(getCanvasPoint(events[i]));
                 }
+                // Wipe the previous guess, draw the real ink, then guess again.
+                clearPredictionTrail();
                 drawIncrementalSegments(prevIdx);
                 AppState.lastRenderedIndex = AppState.currentRawPoints.length;
+                drawPredictedTail(e);
             }
         });
 
@@ -3783,12 +3918,12 @@
                 }
 
                 // Draw the writing point ourselves: the native cursor is rendered at the OS
-                // cursor scale, which looks oversized and clumsy on a high-DPI tablet.
+                // cursor scale, which looks oversized and clumsy on a high-DPI tablet. Each
+                // preview routine clears only its own trail — never the whole page.
                 const wantsEraserRing = AppState.hoverBarrelPressed || AppState.activeTool === 'eraser';
                 if (wantsEraserRing) {
                     drawEraserCursorPreview(getCanvasPoint(e));
                 } else if (AppState.activeTool !== 'lasso' && AppState.activeTool !== 'pan') {
-                    ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
                     drawPenCursorPreview(getCanvasPoint(e));
                 }
                 return;
@@ -3802,7 +3937,7 @@
             if (!AppState.tempEraserActive && (e.pointerType === 'eraser' || (e.buttons & 32) === 32 || (e.buttons & 2) === 2)) {
                 AppState.tempEraserActive = true;
                 AppState.currentRawPoints = [];
-                ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+                clearLayer(ctxInteraction);
                 pushUndoState();
             }
 
@@ -3830,8 +3965,10 @@
                 }
 
                 if (AppState.activeTool !== 'shape' && !AppState.straightLineMode) {
+                    clearPredictionTrail();
                     drawIncrementalSegments(prevIdx);
                     AppState.lastRenderedIndex = AppState.currentRawPoints.length;
+                    drawPredictedTail(e);
                 } else {
                     renderInteractionOverlay();
                 }
@@ -3855,9 +3992,8 @@
         canvasInteraction.addEventListener('pointerleave', () => {
             if (AppState.isDrawing) return;
             if (AppState.activeTool === 'lasso') return;
-            ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+            clearLayer(ctxInteraction);
         });
-
         function finishPointerInteraction(e) {
             if (!AppState.isDrawing) return;
             if (e && e.pointerId !== undefined && AppState.activePointerId !== null && e.pointerId !== AppState.activePointerId && e.pointerType !== 'pen' && e.pointerType !== 'eraser') {
@@ -3877,7 +4013,10 @@
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
                 AppState.tempEraserActive = false;
                 AppState.hoverBarrelPressed = false;
-                ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+                // The erase repaints were coalesced into animation frames while wiping; make sure
+                // the final state is on screen the moment the pen lifts.
+                eraseFlushRepaint();
+                clearLayer(ctxInteraction);
                 scheduleSavePage();
                 return;
             }
@@ -3926,7 +4065,7 @@
                 AppState.currentRawPoints = [];
                 AppState.lastRenderedIndex = 0;
                 canvasInteraction.style.opacity = '1';
-                ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+                clearLayer(ctxInteraction);
                 scheduleSavePage();
                 return;
             }
@@ -3975,26 +4114,49 @@
          * ============================================================================
          */
         /**
+         * Clears just the little box the cursor travelled through, instead of repainting the whole
+         * page. A full-page `clearRect` on a 2900x3900 layer, once per stylus sample (~120 a
+         * second), is why the writing point used to lag behind the pen.
+         */
+        function clearCursorTrail(from, to, pad) {
+            if (!from || !to) return;
+            ctxInteraction.clearRect(
+                Math.min(from.x, to.x) - pad,
+                Math.min(from.y, to.y) - pad,
+                Math.abs(to.x - from.x) + pad * 2,
+                Math.abs(to.y - from.y) + pad * 2
+            );
+        }
+
+        /**
          * The writing point shown while the pen hovers above the paper.
-         * Deliberately tiny — a 2px dot inside a faint halo — so it marks the exact spot
-         * without covering the letter being written.
+         *
+         * Deliberately minimal — one hairline ring with a single pixel of centre — and drawn at a
+         * CONSTANT ON-SCREEN size, the way a system cursor behaves: it marks the exact spot
+         * without covering the letter being written, and it stays the same size at every zoom.
          */
         function drawPenCursorPreview(pt) {
+            clearCursorTrail(penCursorAt || eraserRingAt, pt, 16);
+            eraserRingAt = null;
+            penCursorAt = { x: pt.x, y: pt.y };
+            const s = 1 / (AppState.zoomScale || 1);
             ctxInteraction.save();
+            ctxInteraction.lineWidth = 1.1 * s;
+            ctxInteraction.strokeStyle = 'rgba(15, 23, 42, 0.5)';
             ctxInteraction.beginPath();
-            ctxInteraction.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
-            ctxInteraction.fillStyle = '#0F172A';
-            ctxInteraction.fill();
-            ctxInteraction.beginPath();
-            ctxInteraction.arc(pt.x, pt.y, 3.4, 0, Math.PI * 2);
-            ctxInteraction.strokeStyle = 'rgba(15, 23, 42, 0.25)';
-            ctxInteraction.lineWidth = 1;
+            ctxInteraction.arc(pt.x, pt.y, 3.6 * s, 0, Math.PI * 2);
             ctxInteraction.stroke();
+            ctxInteraction.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctxInteraction.beginPath();
+            ctxInteraction.arc(pt.x, pt.y, 1.15 * s, 0, Math.PI * 2);
+            ctxInteraction.fill();
             ctxInteraction.restore();
         }
 
         function drawEraserCursorPreview(pt) {
-            ctxInteraction.clearRect(0, 0, cachedCanvasRect.width, cachedCanvasRect.height);
+            clearCursorTrail(eraserRingAt || penCursorAt, pt, ERASER_RADIUS + 22);
+            penCursorAt = null;
+            eraserRingAt = { x: pt.x, y: pt.y };
             ctxInteraction.save();
             ctxInteraction.beginPath();
             ctxInteraction.arc(pt.x, pt.y, ERASER_RADIUS, 0, Math.PI * 2);
@@ -4006,12 +4168,89 @@
             ctxInteraction.restore();
         }
 
+        /** Takes the writing point / eraser ring off the screen (pen left, tool changed, ...). */
+        function hideCursorPreviews() {
+            if (penCursorAt) clearCursorTrail(penCursorAt, penCursorAt, 16);
+            if (eraserRingAt) clearCursorTrail(eraserRingAt, eraserRingAt, ERASER_RADIUS + 22);
+            penCursorAt = null;
+            eraserRingAt = null;
+        }
+
         function distToSegment(p, v, w) {
             const l2 = (w.x - v.x) ** 2 + (w.y - v.y) ** 2;
             if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
             let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
             t = Math.max(0, Math.min(1, t));
             return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
+        }
+
+        /**
+         * Bounding box of a stroke, cached per stroke OBJECT.
+         *
+         * A stroke is replaced rather than mutated whenever it is edited, so a WeakMap keyed by
+         * the stroke can never go stale — and it means the eraser no longer has to scan every
+         * segment of every stroke on every single stylus sample, which is what made wiping feel
+         * heavy on a page with a lot of writing.
+         */
+        const strokeBoxCache = new WeakMap();
+        function strokeBox(s) {
+            let box = strokeBoxCache.get(s);
+            if (box) return box;
+            const pts = s.points || [];
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+            for (let i = 0; i < pts.length; i++) {
+                const p = pts[i];
+                if (p.x < x0) x0 = p.x;
+                if (p.y < y0) y0 = p.y;
+                if (p.x > x1) x1 = p.x;
+                if (p.y > y1) y1 = p.y;
+            }
+            box = { x0, y0, x1, y1, empty: !isFinite(x0) };
+            if (!box.empty) strokeBoxCache.set(s, box);
+            return box;
+        }
+
+        /** Cheap "could this stroke be anywhere near the point?" test, before any real work. */
+        function strokeNearPoint(s, pt, extra) {
+            const b = strokeBox(s);
+            if (b.empty) return false;
+            return pt.x >= b.x0 - extra && pt.x <= b.x1 + extra
+                && pt.y >= b.y0 - extra && pt.y <= b.y1 + extra;
+        }
+
+        /**
+         * The eraser used to repaint all four full-page canvases once PER SAMPLE: a quick wipe
+         * produces ~120 samples a second, so a single gesture meant hundreds of full repaints
+         * and the eraser lagged several strokes behind the pen. Repaints are coalesced into one
+         * per animation frame now. Pen-up always repaints (see eraseFlushRepaint).
+         */
+        let eraseRepaintQueued = false;
+        let eraseRepaintDirty = false;
+        function requestEraseRepaint() {
+            eraseRepaintDirty = true;
+            if (eraseRepaintQueued) return;
+            eraseRepaintQueued = true;
+            const run = () => {
+                eraseRepaintQueued = false;
+                if (!eraseRepaintDirty) return;
+                eraseRepaintDirty = false;
+                renderAllLayers();
+            };
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(run);
+                // Safety net: requestAnimationFrame is throttled in a background tab, and an eraser
+                // that visibly does nothing is worse than an unthrottled one.
+                setTimeout(() => { if (eraseRepaintQueued) run(); }, 140);
+            } else {
+                run();
+            }
+        }
+        /** Paint the pending eraser work right now (called on pen-up). */
+        function eraseFlushRepaint() {
+            if (!eraseRepaintDirty) return;
+            eraseRepaintDirty = false;
+            eraseRepaintQueued = false;
+            renderAllLayers();
         }
 
         function eraseAtPoint(pt) {
@@ -4021,6 +4260,7 @@
             if (AppState.eraserMode === 'stroke') {
                 const beforeCount = AppState.strokes.length;
                 AppState.strokes = AppState.strokes.filter(s => {
+                    if (!strokeNearPoint(s, pt, eraserRadius)) return true;
                     const hitThresh = eraserRadius + (s.size || 3) / 2;
                     if (s.points.length === 1) {
                         return Math.hypot(pt.x - s.points[0].x, pt.y - s.points[0].y) > hitThresh;
@@ -4037,6 +4277,10 @@
                 // Partial Eraser: Splits vector strokes cleanly at the erased points
                 const nextStrokes = [];
                 for (const s of AppState.strokes) {
+                    if (!strokeNearPoint(s, pt, eraserRadius)) {
+                        nextStrokes.push(s);
+                        continue;
+                    }
                     const hitThresh = eraserRadius + (s.size || 3) / 2;
                     let currentChunk = [];
                     let strokeModified = false;
@@ -4071,7 +4315,7 @@
             if (AppState.symbols.length !== symBefore) changed = true;
 
             if (changed) {
-                renderAllLayers();
+                requestEraseRepaint();
             }
         }
 
@@ -4858,6 +5102,20 @@
          * A line is then only split where a really wide empty area proves a new item — never at
          * a word gap, which is the other half of the old over-splitting.
          */
+        /**
+         * True when a box is too small to be an item of writing of its own: a dot of پ/ت/چ/ج/ق/ی
+         * drawn as a little circle, a bullet, a hamza, a short dash. Both dimensions are tested, so
+         * a written word (a LONG box) can never qualify, and a big hand-drawn dot still qualifies
+         * even when the letters around it are barely taller.
+         *
+         * The height bound is deliberately well under one letter height: a short number such as
+         * «۱۲» is narrow but exactly as tall as the rest of the writing, and has to stay an item.
+         */
+        function isTinyMark(w, h, tallH) {
+            const t = Math.max(1, tallH || 1);
+            return h <= t * 0.75 && w <= t * 2;
+        }
+
         function groupStrokesIntoBlocks(strokes) {
             const boxes = [];
             strokes.forEach(s => {
@@ -4897,6 +5155,11 @@
             // case a pure size threshold gets wrong.
             const dotLimit = tallH;
             const isDotLike = b => b.w <= dotLimit && b.h <= dotLimit;
+            // A dot-like stroke may never open an item of its own (see step 3), and a block made of
+            // nothing but marks is folded into a real block (step 4). `isMark` is the stricter of
+            // the two, so a block of short WORDS is never mistaken for a block of dots.
+            const isMark = b => isTinyMark(b.w, b.h, tallH);
+            const isNoItem = b => isDotLike(b) || isMark(b);
             let lineBoxes = boxes.filter(b => !isDotLike(b));
             let floating = boxes.filter(isDotLike);
             if (lineBoxes.length === 0) { lineBoxes = boxes.slice(); floating = []; }   // nothing but dots
@@ -4930,24 +5193,68 @@
 
             // 3. Inside a line only a really wide empty area starts a new item. Persian reads
             //    right-to-left, so the strokes of a line are walked from the right edge leftwards.
+            //    A DOT can never start a new item however wide the gap: a lone dot is not an item
+            //    of writing, and a dot sitting a little away from its word (a bullet at the start of
+            //    an RTL line, a dot over a distant letter) used to open a card of its own.
             const gapTol = Math.max(48, tallH * 2.2);
             const blocks = [];
             lines.forEach(line => {
                 line.members.sort((a, b) => b.cx - a.cx);
                 let current = null;
                 line.members.forEach(b => {
-                    if (current && (current.x0 - b.x1) <= gapTol) {
+                    if (current && ((current.x0 - b.x1) <= gapTol || isNoItem(b))) {
                         current.x0 = Math.min(current.x0, b.x0);
                         current.y0 = Math.min(current.y0, b.y0);
                         current.x1 = Math.max(current.x1, b.x1);
                         current.y1 = Math.max(current.y1, b.y1);
+                        current.dotOnly = current.dotOnly && isMark(b);
                         current.strokes.push(b.stroke);
                     } else {
-                        current = { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, strokes: [b.stroke] };
+                        current = { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, strokes: [b.stroke], dotOnly: isMark(b) };
                         blocks.push(current);
                     }
                 });
             });
+
+            // 4. A block made of nothing but dots can never be an item of its own while the page
+            //    has real writing on it: it is folded into the block it sits closest to. This is
+            //    what keeps the dot of a letter — or a bullet, or a stray dash — inside the card of
+            //    the line it belongs to, instead of becoming a separate card. On an RTL page a
+            //    separate dot was also the right-most block, so it became the ROOT of the tree and
+            //    the real line hung underneath it, which read as "the grouping is wrong".
+            if (blocks.length > 1) {
+                const solid = blocks.filter(b => !b.dotOnly);
+                if (solid.length > 0) {
+                    const merged = [];
+                    // NOTE: the loop variable is `blk`, not `block`, on purpose. Tailwind scans raw
+                    // text (comments and code included) and turns an exclamation mark followed by a
+                    // word into a utility class, which emitted a useless rule into the built CSS.
+                    blocks.forEach(blk => {
+                        if (!blk.dotOnly) { merged.push(blk); return; }
+                        const bcy = (blk.y0 + blk.y1) / 2;
+                        let best = null, bestD = Infinity;
+                        solid.forEach(s => {
+                            // The vertical gap decides which line the mark belongs to; the
+                            // horizontal gap only breaks ties.
+                            const d = Math.abs(((s.y0 + s.y1) / 2) - bcy) * 3
+                                + Math.max(0, Math.max(s.x0 - blk.x1, blk.x0 - s.x1));
+                            if (d < bestD) { bestD = d; best = s; }
+                        });
+                        // Only fold in a mark that really sits at that block's height; one parked
+                        // far away keeps its own item so it can be dragged where it belongs.
+                        if (!best || Math.abs(((best.y0 + best.y1) / 2) - bcy) > tallH * 4) {
+                            merged.push(blk);
+                            return;
+                        }
+                        best.x0 = Math.min(best.x0, blk.x0);
+                        best.y0 = Math.min(best.y0, blk.y0);
+                        best.x1 = Math.max(best.x1, blk.x1);
+                        best.y1 = Math.max(best.y1, blk.y1);
+                        blk.strokes.forEach(s => best.strokes.push(s));
+                    });
+                    return merged;
+                }
+            }
             return blocks;
         }
 
@@ -4960,12 +5267,35 @@
          */
         function assignHandwritingParents(blocks) {
             const INDENT_TOL = 18;
+            blocks.forEach(b => { b.id = uid(); });
+
+            // A mark too small to be a line of writing must never become a PARENT. In an RTL
+            // outline the right-most block is the root, so a stray dot that happened to sit to the
+            // right of a real line became the root and the whole line hung underneath it — the
+            // tree looked like it had "not understood" the content, even though it had.
+            const heights = blocks.map(b => b.y1 - b.y0).sort((a, b) => a - b);
+            const tallH = heights[Math.floor(heights.length * 0.9)] || heights[heights.length - 1] || 18;
+            const isMark = b => isTinyMark(b.x1 - b.x0, b.y1 - b.y0, tallH);
+
+            const lineBlocks = blocks.filter(b => !isMark(b));
+            const marks = blocks.filter(isMark);
+
             const stack = [];
-            blocks.forEach(block => {
-                block.id = uid();
+            lineBlocks.forEach(block => {
                 while (stack.length && stack[stack.length - 1].x1 < block.x1 + INDENT_TOL) stack.pop();
                 block.parentId = stack.length ? stack[stack.length - 1].id : null;
                 stack.push(block);
+            });
+
+            // Each mark joins the line it sits closest to instead of standing on its own.
+            marks.forEach(mark => {
+                const mcy = (mark.y0 + mark.y1) / 2;
+                let best = null, bestD = Infinity;
+                lineBlocks.forEach(b => {
+                    const d = Math.abs(((b.y0 + b.y1) / 2) - mcy);
+                    if (d < bestD) { bestD = d; best = b; }
+                });
+                mark.parentId = best ? best.id : null;
             });
 
             if (blocks.length > 1 && blocks.every(b => !b.parentId)) {
@@ -5973,9 +6303,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 11,
-            date: '2026-10-16',
-            features: 'legible cards + persian-keyboard undo/redo'
+            version: 12,
+            date: '2026-10-17',
+            features: 'low-latency ink + no cursor trail + dot grouping'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
