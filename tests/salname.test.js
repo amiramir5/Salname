@@ -65,7 +65,12 @@ const FN_NAMES = [
     'structureBoxToSourceRect',
     'isTinyMark',
     'groupStrokesIntoBlocks',
-    'assignHandwritingParents'
+    'assignHandwritingParents',
+    'cloneStrokesInto',
+    'cloneFlatInto',
+    'unionBox',
+    'inflateBox',
+    'boxIntersects'
 ];
 
 const bodies = FN_NAMES.map(n => extractFn(html, n)).join('\n\n');
@@ -76,7 +81,12 @@ const {
     structureBoxToSourceRect,
     isTinyMark,
     groupStrokesIntoBlocks,
-    assignHandwritingParents
+    assignHandwritingParents,
+    cloneStrokesInto,
+    cloneFlatInto,
+    unionBox,
+    inflateBox,
+    boxIntersects
 } = factory();
 
 /* ------------------------------------------------------------------ *
@@ -772,6 +782,137 @@ ok('...and no header button is filled with a competing accent',
     !/id="btn-export" class="[^"]*bg-slate-900/.test(html));
 ok('...and colour is kept for meaning, not decoration',
     html.includes('text-violet-600') && html.includes('text-blue-600'));
+
+
+/* ------------------------------------------------------------------ *
+ * 12. The eraser repaints only the rectangle it changed — and every
+ *     pixel of an erased element is inside that rectangle
+ * ------------------------------------------------------------------ */
+console.log('\n--- 12. eraser region repaint + pen quality ---');
+
+// The rectangle arithmetic. A deleted stroke, symbol or text must end up inside the union of
+// everything the gesture touched, or its pixels survive as a ghost until the pen is lifted.
+const boxA = { x0: 10, y0: 20, x1: 30, y1: 40 };
+check('the first box is the whole union when there was none', unionBox(null, boxA), boxA);
+check('a null box adds nothing', unionBox(boxA, null), boxA);
+check('a box with an infinite edge (an empty stroke) adds nothing',
+    unionBox(boxA, { x0: Infinity, y0: 0, x1: 5, y1: 5 }), boxA);
+check('the union encloses both rectangles',
+    unionBox(boxA, { x0: -5, y0: 25, x1: 12, y1: 60 }), { x0: -5, y0: 20, x1: 30, y1: 60 });
+check('inflating grows the box on every side',
+    inflateBox(boxA, 3), { x0: 7, y0: 17, x1: 33, y1: 43, empty: false });
+check('an empty box cannot be inflated', inflateBox({ empty: true }, 3), { empty: true });
+
+// Two box spellings live in this file: {x,y,w,h} from getElementBoundingBox and
+// {x0,y0,x1,y1} from strokeBox. The eraser has to understand both.
+const region = { x0: 100, y0: 100, x1: 200, y1: 200 };
+ok('a {x,y,w,h} box overlapping the region intersects it',
+    boxIntersects({ x: 150, y: 150, w: 20, h: 20 }, region));
+ok('a {x0,y0,x1,y1} box overlapping the region intersects it',
+    boxIntersects({ x0: 190, y0: 190, x1: 210, y1: 210 }, region));
+ok('a box fully outside the region does not intersect it',
+    !boxIntersects({ x: 300, y: 300, w: 10, h: 10 }, region));
+ok('a near miss is not an intersection without a pad',
+    !boxIntersects({ x: 205, y: 150, w: 10, h: 10 }, region));
+ok('...and is one with a pad wide enough to reach it',
+    boxIntersects({ x: 205, y: 150, w: 10, h: 10 }, region, 10));
+ok('an empty stroke box never intersects', !boxIntersects({ x0: Infinity, empty: true }, region));
+ok('a missing box never intersects', !boxIntersects(null, region));
+
+// The deep copy that runs on the input path (pen-up) must stay a real deep copy: several lasso
+// operations mutate strokes and symbols in place, so a shallow copy would rewrite history.
+const srcStrokes = [{ id: 's1', size: 4, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] }];
+const strokeCopy = cloneStrokesInto(srcStrokes);
+check('the stroke copy has the same values', strokeCopy, srcStrokes);
+ok('...with its own stroke and point objects',
+    strokeCopy[0] !== srcStrokes[0] &&
+    strokeCopy[0].points !== srcStrokes[0].points &&
+    strokeCopy[0].points[0] !== srcStrokes[0].points[0]);
+strokeCopy[0].points[0].x = 999;
+check('...so editing a copy never rewrites the original', srcStrokes[0].points[0].x, 1);
+const srcNodes = [{ id: 'n1', text: 'ریاضی' }];
+const nodeCopy = cloneFlatInto(srcNodes);
+ok('the flat copy is a new array of new items', nodeCopy !== srcNodes && nodeCopy[0] !== srcNodes[0]);
+nodeCopy[0].text = 'فیزیک';
+check('...and editing a copied item leaves the original alone', srcNodes[0].text, 'ریاضی');
+check('a missing list copies to an empty list', cloneFlatInto(null), []);
+
+// The ink of a stroke is `size` wide with round caps, so its POINT box is smaller than its ink.
+// Clearing only the point box left a 1-2px outline of every erased stroke behind.
+ok('an erased stroke is boxed by its inked width, not just its points',
+    html.includes('inflateBox(strokeBox(s), (s.size || 3) / 2 + 2)') &&
+    !html.includes('addDirtyBox(strokeBox(s))'));
+ok('an erased symbol is boxed too', /addDirtyBox\(symbolBox\(sym\)\)/.test(html));
+// The bounding box is cached per stroke object, so the two places that edit a stroke IN PLACE
+// (shifting the handwriting down under the tree, and scaling a lasso selection) have to drop the
+// cached entry — otherwise the eraser tests, and clears, where the stroke used to be.
+ok('a stroke edited in place can drop its cached bounding box',
+    html.includes('function invalidateStrokeBox(s)'));
+check('...and both in-place editors do drop it',
+    (html.match(/invalidateStrokeBox\(/g) || []).length, 3);
+ok('the erased stroke and symbol boxes are the only way the region grows',
+    html.includes('const addDirtyStroke = (s) =>') && html.includes('addDirtyDisc(pt, eraserRadius + 24)'));
+ok('the gesture accumulates one dirty box out of every sample',
+    html.includes('eraseDirtyBox = unionBox(eraseDirtyBox, box);'));
+ok('the erase reports the box it changed', html.includes('requestEraseRepaint(dirty);'));
+ok('an unknown box falls back to the honest full repaint',
+    /function repaintInkRegion\(box\)[\s\S]{0,400}renderAllLayers\(\);\s*\n\s*return;/.test(html));
+ok('the region repaint clears both ink layers',
+    /function repaintInkRegion[\s\S]*?ctxInk\.clearRect\(x, y, rw, rh\);[\s\S]*?ctxHighlighter\.clearRect\(x, y, rw, rh\);/.test(html));
+// A fractional clearRect/clip edge antialiases, and the stroke crossing it was redrawn with a
+// fractionally different coverage — a faint seam along the edge of the rectangle while dragging.
+ok('the repainted rectangle is snapped to whole device pixels',
+    html.includes('const sx = dpr || 1;') && html.includes('Math.floor(box.x0 * sx) / sx') && html.includes('Math.ceil(box.x1 * sx) / sx'));
+ok('pen-up does one authoritative full repaint',
+    /function eraseFlushRepaint\(\)[\s\S]{0,300}renderAllLayers\(\)/.test(html));
+ok('the erase path itself never repaints the whole page',
+    !/function eraseAtPoint\(pt\)[\s\S]{0,6000}?renderAllLayers\(\)/.test(html));
+
+// The dashed «دستخط شما» separator is drew on the ink layer in two places now, so the position
+// has to come from one shared function — otherwise the region repaint could draw it where the
+// full repaint would not (or miss it entirely).
+ok('the separator position has a single source of truth',
+    html.includes('function handwritingSeparatorY()'));
+ok('...used by the full repaint', /function renderAllLayers[\s\S]{0,2000}drawHandwritingSeparator\(ctxInk, w, h\);/.test(html));
+ok('...and by the region repaint, only when it crosses the rectangle',
+    html.includes('drawHandwritingSeparator(ctxInk, w, h, sepY);') &&
+    html.includes('sepY + 8 >= region.y0 && sepY - 22 <= region.y1'));
+
+// Pen quality: the resolution is the one dial that trades crispness for frames, so it has to be
+// caps at 2, floor at 1, and remembered.
+ok('the ink resolution is capped and floored by the quality setting',
+    html.includes("const qualityCap = AppState.penQuality === 'smooth' ? 1 : 2;") &&
+    html.includes('dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), qualityCap);'));
+ok('the quality choice survives a reload',
+    html.includes("const PEN_QUALITY_KEY = 'salname_pen_quality';") &&
+    /localStorage\.setItem\(PEN_QUALITY_KEY/.test(html) &&
+    /localStorage\.getItem\(PEN_QUALITY_KEY\)/.test(html));
+ok('the default is the sharp one', /penQuality: 'max'/.test(html));
+// The PDF backdrop is a whole extra page-sized canvas that most pages never use.
+ok('the PDF layer is retired when no PDF is loaded',
+    html.includes('canvasPdf.width = 1;') && html.includes("canvasPdf.style.display = 'none';"));
+ok('...and is brought back, at the right size, when one is',
+    /canvasPdf\.style\.display = '';[\s\S]{0,120}canvasPdf\.width = w \* dpr;/.test(html));
+
+// The on-device meter: the user has the stylus, we do not, so the app has to be able to measure
+// itself instead of us guessing at the tablet's latency.
+ok('the pen meter is a header button and a card',
+    html.includes('id="btn-pen-meter"') && html.includes('id="pen-meter"'));
+ok('it samples the raw pointer stream and the frame clock',
+    html.includes('function penMeterSample(e, isRaw)') && html.includes('function penMeterFrame()'));
+ok('...and records what it measured',
+    html.includes('function penMeterPercentile(') && html.includes('function renderPenMeter()'));
+ok('the raw pointer rate and the prediction hit rate are both measured',
+    html.includes('penMeter.rawSamples') && html.includes('penMeter.predChances') && html.includes('penMeter.predHits'));
+ok('a dropped frame is counted, not guessed',
+    /delta > 26 && now - penMeter\.lastPenAt < 500\) penMeter\.dropped\+\+/.test(html));
+ok('the report can be copied into a bug message', html.includes('function penMeterReport()'));
+ok('the report names the browser and the layer sizes',
+    html.includes('navigator.userAgent') && html.includes('function meterLayerInfo()'));
+ok('an invisible or 1x1 layer is not counted against the bitmap budget',
+    /function meterLayerInfo[\s\S]{0,400}c\.style\.display === 'none' \|\| c\.width <= 1/.test(html));
+ok('the meter says the one thing that fixes a frame drop',
+    html.includes('دوباره بنویس') && html.includes('اگر افت قطع شد'));
 
 
 /* ------------------------------------------------------------------ */

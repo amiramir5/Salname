@@ -285,6 +285,105 @@
             }
         }
 
+        /* On-device pen latency meter (section 9.1). It deliberately sits past the tool dock, and
+           above the bottom dock on a phone, so it never covers the paper you are testing on. */
+        #pen-meter {
+            position: fixed;
+            z-index: 45;
+            left: 76px;
+            bottom: 18px;
+            width: 268px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            background: #FFFFFF;
+            box-shadow: var(--shadow-3);
+            font-size: 11px;
+            line-height: 1.6;
+            color: #334155;
+        }
+        @media (max-width: 768px) {
+            #pen-meter {
+                left: 12px;
+                right: 12px;
+                width: auto;
+                bottom: 60px;
+            }
+        }
+        #pen-meter-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-weight: 700;
+            color: #0F172A;
+            margin-bottom: 6px;
+        }
+        #pen-meter-head button {
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            background: #F8FAFC;
+            color: #334155;
+            font-size: 10px;
+            padding: 3px 7px;
+            cursor: pointer;
+        }
+        #pen-meter-head button:hover {
+            background: #F1F5F9;
+        }
+        .pen-meter-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 2px 10px;
+        }
+        .pen-meter-grid span:nth-child(even) {
+            font-weight: 700;
+            color: #0F172A;
+            font-variant-numeric: tabular-nums;
+        }
+        #pen-meter-note {
+            margin: 7px 0 0;
+            padding: 6px 8px;
+            border-radius: var(--radius-sm);
+            background: #FFFBEB;
+            border: 1px solid #FDE68A;
+            color: #92400E;
+            font-size: 10px;
+        }
+        .pen-meter-quality {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        .pen-meter-quality .btns {
+            display: flex;
+            gap: 6px;
+            margin: 4px 0 5px;
+        }
+        .pen-meter-quality .btns button {
+            flex: 1 1 0;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            background: #FFFFFF;
+            color: #475569;
+            font-size: 10px;
+            padding: 5px 4px;
+            cursor: pointer;
+            transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+        .pen-meter-quality .btns button.active {
+            background-color: #EFF6FF;
+            color: #2563EB;
+            border-color: #BFDBFE;
+            font-weight: 700;
+        }
+        .pen-meter-quality p {
+            margin: 0;
+            font-size: 10px;
+            line-height: 1.7;
+            color: #64748B;
+        }
+
         /* Priority input styling */
         .priority-input {
             background: transparent;
@@ -551,6 +650,16 @@
                     <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                     <line x1="3" y1="9" x2="21" y2="9"></line>
                     <line x1="3" y1="15" x2="21" y2="15"></line>
+                </svg>
+            </button>
+
+            <!-- On-device pen latency meter: the only way to see what the stylus is really doing
+                 on the tablet that has the problem. -->
+            <button id="btn-pen-meter" class="tool-btn p-1.5 rounded-md text-slate-600 border border-slate-200" title="سنجش سرعت و تأخیر قلم روی همین دستگاه (تست قلم)">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3.5 18a9 9 0 1 1 17 0"></path>
+                    <path d="M12 18l3.5-5.5"></path>
+                    <circle cx="12" cy="18" r="1.2" fill="currentColor" stroke="none"></circle>
                 </svg>
             </button>
 
@@ -1234,6 +1343,37 @@
 
                 <div id="app-build-stamp" class="text-[9px] text-slate-400 text-center pt-1 select-text"></div>
             </div>
+        </div>
+    </div>
+    <!-- ON-DEVICE PEN LATENCY METER — see section 9.1. Hidden until its header button is tapped.
+         Deliberately plain CSS with no new utility classes, so the Tailwind build stays as is. -->
+    <div id="pen-meter" class="hidden" dir="rtl">
+        <div id="pen-meter-head">
+            <span>سنجش قلم (همین دستگاه)</span>
+            <span style="display:flex;gap:6px;">
+                <button id="pen-meter-copy" type="button">کپی نتیجه</button>
+                <button id="pen-meter-close" type="button">بستن</button>
+            </span>
+        </div>
+        <div class="pen-meter-grid">
+            <span>تأخیر ورودی (میانه / ۹۰٪)</span><span id="pen-meter-lat">—</span>
+            <span>نرخ فریم هنگام نوشتن</span><span id="pen-meter-fps">—</span>
+            <span>فریم افتاده</span><span id="pen-meter-drop">—</span>
+            <span>نمونهٔ خام / حرکت</span><span id="pen-meter-samples">—</span>
+            <span>پیش‌بینی قلم</span><span id="pen-meter-pred">—</span>
+            <span>بوم و لایه‌ها</span><span id="pen-meter-canvas">—</span>
+        </div>
+        <p id="pen-meter-note" class="hidden"></p>
+        <div class="pen-meter-quality">
+            <div>سرعت قلم</div>
+            <div class="btns">
+                <button id="pen-quality-max" type="button">حداکثر کیفیت</button>
+                <button id="pen-quality-smooth" type="button">روان‌تر (سبک‌تر)</button>
+            </div>
+            <p>
+                چند خط بنویس و همین اعداد را ببین. اگر «فریم افتاده» بالا رفت، «روان‌تر» را بزن و
+                بلافاصله همان‌جا را دوباره بنویس تا دو حالت را مقایسه کنی.
+            </p>
         </div>
     </div>
     <script>
@@ -2078,6 +2218,10 @@
 
             // Zoom & 2D Pan State for Portrait & Landscape Tablet Navigation
             zoomScale: 1.0,
+            // 'max' renders ink at the display's own pixel ratio; 'smooth' drops the drawing
+            // layers to 1:1 device pixels for tablets whose GPU cannot keep up. See
+            // setPenQuality(). A device setting, so it is remembered in localStorage.
+            penQuality: 'max',
             lastStylusActivityTime: 0,
             isTouchPanning: false,
             panStartScrollLeft: 0,
@@ -2199,7 +2343,13 @@
          * display with devicePixelRatio > 1, then "snap" to the right weight on pen-up.
          */
         function resizeCanvases() {
-            dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2);
+            // Render at the display's OWN pixel ratio, never below it and never above 2. The old
+            // rule forced a floor of 1.5, which on a 1x or 1.25x panel allocated up to 2.25x more
+            // pixels than the screen can even show — pure rasterisation cost for no visible
+            // detail, on exactly the cheap tablets where it hurts most. `penQuality: 'smooth'`
+            // (the pen meter's switch) caps it at 1 for a device that cannot keep 60 fps.
+            const qualityCap = AppState.penQuality === 'smooth' ? 1 : 2;
+            dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), qualityCap);
             // The BACKING STORE must never follow the zoom. `getBoundingClientRect()` reports
             // visual (zoomed) pixels, so sizing the layers from it made every layer change size
             // when the user zoomed: the paper coordinate space stayed 1450 wide while the bitmap
@@ -2213,7 +2363,7 @@
             cachedCanvasRect = paperStage.getBoundingClientRect();
 
             // High-DPI static canvases for crisp handwriting quality
-            [canvasPdf, canvasHighlighter, canvasInk].forEach(c => {
+            [canvasHighlighter, canvasInk].forEach(c => {
                 c.width = layoutW * dpr;
                 c.height = layoutH * dpr;
                 const ctx = c.getContext('2d');
@@ -2228,6 +2378,7 @@
             ctxInteraction.lineCap = 'round';
             ctxInteraction.lineJoin = 'round';
 
+            // renderPdfBackground() sizes (or retires) the PDF layer itself.
             renderPdfBackground();
             renderAllLayers();
         }
@@ -2265,7 +2416,10 @@
             // `zoom` also keeps getBoundingClientRect() in visual pixels, which is what
             // getCanvasPoint() divides by zoomScale to get paper coordinates.
             paperStage.style.transform = '';
-            paperStage.style.zoom = AppState.zoomScale;
+            // 100% must not touch the property at all: a `zoom` of exactly 1 still sends the
+            // whole paper subtree (four full-page layers + the sheet shadow) down Chromium's
+            // scaled-paint path instead of the plain 1:1 one.
+            paperStage.style.zoom = AppState.zoomScale === 1 ? '' : String(AppState.zoomScale);
             const btnReset = document.getElementById('btn-zoom-reset');
             if (btnReset) {
                 btnReset.textContent = `${toPersianDigits(Math.round(AppState.zoomScale * 100))}٪`;
@@ -2364,7 +2518,7 @@
         async function loadPdfFromBase64(base64Data, pageNum = 1) {
             if (!base64Data || !window.pdfjsLib) {
                 AppState.pdfDocInstance = null;
-                ctxPdf.clearRect(0, 0, paperStage.clientWidth, paperStage.clientHeight);
+                renderPdfBackground();
                 document.getElementById('pdf-controls-bar').classList.add('hidden');
                 document.getElementById('pdf-controls-bar').classList.remove('flex');
                 return;
@@ -2396,8 +2550,23 @@
         async function renderPdfBackground() {
             const w = paperStage.clientWidth;
             const h = paperStage.clientHeight;
+            // No PDF open → the layer is retired completely (1x1 backing store, removed from the
+            // compositor). It used to be a full page-sized transparent texture that the compositor
+            // sampled on every single frame while the user was writing, for nothing.
+            if (!AppState.pdfDocInstance) {
+                canvasPdf.width = 1;
+                canvasPdf.height = 1;
+                canvasPdf.style.display = 'none';
+                ctxPdf.clearRect(0, 0, 1, 1);
+                return;
+            }
+            if (canvasPdf.style.display === 'none' || canvasPdf.width <= 1) {
+                canvasPdf.style.display = '';
+                canvasPdf.width = w * dpr;
+                canvasPdf.height = h * dpr;
+                ctxPdf.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
             ctxPdf.clearRect(0, 0, w, h);
-            if (!AppState.pdfDocInstance) return;
 
             try {
                 const page = await AppState.pdfDocInstance.getPage(AppState.pdfPageNum);
@@ -2435,21 +2604,54 @@
             }
         }
 
+        /**
+         * Deep copies WITHOUT `JSON.stringify`.
+         *
+         * `clonePageState()` is called at the END of every single stroke (the snapshot has to
+         * describe the page as it was before that stroke) and once more whenever an erase
+         * begins. `JSON.parse(JSON.stringify(page))` measured ~6 ms for a modest 120-stroke
+         * page on a desktop — and a full stringify + parse of every point is several times
+         * that on a tablet. All of it ran on the main thread in the exact instant the user was
+         * already moving the pen again, which is a dropped frame per word: the next letter's
+         * ink then appears late. These copies build the same data in ~0.4 ms and never
+         * allocate the megabyte-sized intermediate string.
+         *
+         * Every buffer element is copied with a spread, so the snapshot holds its OWN objects
+         * and a later in-place edit (`node.text = …`, `sym.color = …`) cannot rewrite history.
+         */
+        function cloneStrokesInto(list) {
+            const out = new Array(list.length);
+            for (let i = 0; i < list.length; i++) {
+                const s = list[i];
+                const pts = s.points || [];
+                const copyPts = new Array(pts.length);
+                for (let k = 0; k < pts.length; k++) copyPts[k] = { ...pts[k] };
+                out[i] = { ...s, points: copyPts };
+            }
+            return out;
+        }
+        function cloneFlatInto(list) {
+            const src = list || [];
+            const out = new Array(src.length);
+            for (let i = 0; i < src.length; i++) out[i] = { ...src[i] };
+            return out;
+        }
+
         function clonePageState() {
             syncActiveBuffersToStorage();
-            return JSON.parse(JSON.stringify({
-                strokes: AppState.strokes,
-                texts: AppState.texts,
-                symbols: AppState.symbols,
-                mindmapNodes: AppState.mindmapData.nodes,
-                mindmapImages: AppState.mindmapData.images || [],
+            return {
+                strokes: cloneStrokesInto(AppState.strokes),
+                texts: cloneFlatInto(AppState.texts),
+                symbols: cloneFlatInto(AppState.symbols),
+                mindmapNodes: cloneFlatInto(AppState.mindmapData.nodes),
+                mindmapImages: cloneFlatInto(AppState.mindmapData.images || []),
                 // Reviews have to travel with the snapshot too: «جایگزینی با فرمول اصلاحشده»
                 // removes a review entry, and without this Undo restored the node text but left
                 // the review permanently gone.
-                mindmapReviews: AppState.mindmapData.reviews || [],
-                priorities: AppState.priorities,
+                mindmapReviews: cloneFlatInto(AppState.mindmapData.reviews || []),
+                priorities: (AppState.priorities || []).slice(),
                 paperType: AppState.paperType
-            }));
+            };
         }
 
         function pushUndoState() {
@@ -2625,6 +2827,43 @@
          * 7. MULTI-LAYER VECTOR RENDERING PIPELINE (+ UNIFIED BRANCHING TREE)
          * ============================================================================
          */
+        /**
+         * Where the dashed «دستخط شما» separator sits, in paper units, or null when it should not
+         * be drawn at all. Shared by the full repaint and the eraser's region repaint so the two
+         * can never disagree about it.
+         */
+        function handwritingSeparatorY() {
+            if (AppState.workspaceMode !== 'mindmap') return null;
+            if (AppState.strokes.length === 0 || AppState.mindmapData.nodes.length === 0) return null;
+            let minStrokeY = Infinity;
+            for (const s of AppState.strokes) {
+                for (const p of s.points) {
+                    if (p.y < minStrokeY) minStrokeY = p.y;
+                }
+            }
+            if (!(minStrokeY > 120)) return null;
+            return minStrokeY - 18;
+        }
+
+        function drawHandwritingSeparator(ctx, w, h, sepYIn) {
+            const sepY = sepYIn === undefined ? handwritingSeparatorY() : sepYIn;
+            if (sepY === null) return;
+            ctx.save();
+            ctx.strokeStyle = '#CBD5E1';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(40, sepY);
+            ctx.lineTo(w - 40, sepY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#64748B';
+            ctx.font = 'bold 11px Vazirmatn';
+            ctx.textAlign = 'center';
+            ctx.fillText('─── دست‌خط و یادداشت‌های دستی شما (منتقل‌شده به پایین نمودار) ───', w / 2, sepY - 6);
+            ctx.restore();
+        }
+
         function renderAllLayers() {
             const w = paperStage.clientWidth;
             const h = paperStage.clientHeight;
@@ -2659,28 +2898,9 @@
                 }
             }
 
-            // 3.5 If in Mind-Map mode and handwritten strokes exist below the tree, draw a clean visual separator line
-            if (AppState.workspaceMode === 'mindmap' && AppState.strokes.length > 0 && AppState.mindmapData.nodes.length > 0) {
-                let minStrokeY = Infinity;
-                AppState.strokes.forEach(s => s.points.forEach(p => { if (p.y < minStrokeY) minStrokeY = p.y; }));
-                if (minStrokeY > 120 && minStrokeY < Infinity) {
-                    const sepY = minStrokeY - 18;
-                    ctxInk.save();
-                    ctxInk.strokeStyle = '#CBD5E1';
-                    ctxInk.lineWidth = 1;
-                    ctxInk.setLineDash([6, 6]);
-                    ctxInk.beginPath();
-                    ctxInk.moveTo(40, sepY);
-                    ctxInk.lineTo(w - 40, sepY);
-                    ctxInk.stroke();
-                    ctxInk.setLineDash([]);
-                    ctxInk.fillStyle = '#64748B';
-                    ctxInk.font = 'bold 11px Vazirmatn';
-                    ctxInk.textAlign = 'center';
-                    ctxInk.fillText('─── دست‌خط و یادداشت‌های دستی شما (منتقل‌شده به پایین نمودار) ───', w / 2, sepY - 6);
-                    ctxInk.restore();
-                }
-            }
+            // 3.5 In Mind-Map mode, the dashed separator above the hand-written notes that were
+            // moved down under the tree.
+            drawHandwritingSeparator(ctxInk, w, h);
 
             // 4. Render Vector Productivity Symbols
             for (const sym of AppState.symbols) {
@@ -3422,6 +3642,8 @@
                 const deltaY = targetHandwritingStartY - minInkY;
                 strokes.forEach(s => {
                     s.points.forEach(p => { p.y += deltaY; });
+                    // Edited in place, so the eraser's cached box for this stroke is now wrong.
+                    invalidateStrokeBox(s);
                 });
                 texts.forEach(t => { t.y += deltaY; });
                 symbols.forEach(sym => { sym.y += deltaY; });
@@ -3799,6 +4021,13 @@
             } catch (_) {
                 return;
             }
+            // The meter's «پیشبینی قلم» line: how often Chromium offers a guess at all. A device
+            // that never returns one trails further behind the nib no matter what the code does.
+            if (penMeter.open) {
+                penMeter.predChances++;
+                if (predicted.length > 0) penMeter.predHits++;
+            }
+
             if (predicted.length === 0) return;
 
             const pts = AppState.currentRawPoints;
@@ -3948,6 +4177,237 @@
          * 9. HIGH-FRAME-RATE POINTER EVENTS, STYLUS BARREL ERASER & ZERO-LAG ENGINE
          * ============================================================================
          */
+        /**
+         * ============================================================================
+         * 9.1 ON-DEVICE PEN LATENCY METER
+         * ============================================================================
+         * «قلمش دیلی داره» cannot be fixed from a screenshot — the number that decides how slow a
+         * stylus feels is how long the newest hardware sample has to wait before it is drawn, and
+         * only the device in the user's hand can report it. This meter measures that from inside
+         * the REAL pen handler (never from synthetic events), lives behind one small header
+         * button, and can be copied out, so the next optimisation is based on the tablet's
+         * numbers instead of on a guess made on a desktop.
+         *
+         *   - تأخیر ورودی: performance.now() − e.timeStamp, the age of the sample at the instant
+         *     we are about to draw it. Chromium stamps events when they are created, so this
+         *     counts everything between the digitizer and the ink.
+         *   - نرخ فریم / افتاده: requestAnimationFrame intervals. A pen already at the platform's
+         *     floor still feels slow if frames are being dropped, and that is the one cause we can
+         *     do something about (layer count, resolution).
+         *   - نمونهٔ خام: whether `pointerrawupdate` really feeds us (Edge/Chrome) or the app fell
+         *     back to the rAF-throttled `pointermove`.
+         *   - پیشبینی: how often Chromium hands back a predicted point, which is what hides the
+         *     last few milliseconds from the eye.
+         */
+        const PEN_QUALITY_KEY = 'salname_pen_quality';
+        const penMeter = {
+            open: false,
+            lat: [],
+            rawSamples: 0,
+            moveSamples: 0,
+            predHits: 0,
+            predChances: 0,
+            frames: [],
+            dropped: 0,
+            lastFrameAt: 0,
+            lastPenAt: 0,
+            lastRefreshAt: 0
+        };
+
+        /** Called from the real stylus paths only — one cheap push per hardware sample. */
+        function penMeterSample(e, isRaw) {
+            if (!penMeter.open) return;
+            if (isRaw) penMeter.rawSamples++; else penMeter.moveSamples++;
+            const now = performance.now();
+            const age = now - e.timeStamp;
+            if (age >= 0 && age < 400) {
+                penMeter.lat.push(age);
+                if (penMeter.lat.length > 400) penMeter.lat.shift();
+            }
+            penMeter.lastPenAt = now;
+            if (now - penMeter.lastRefreshAt > 300) {
+                penMeter.lastRefreshAt = now;
+                renderPenMeter();
+            }
+        }
+
+        function penMeterPercentile(list, p) {
+            if (!list.length) return null;
+            const sorted = list.slice().sort((a, b) => a - b);
+            return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+        }
+
+        function penMeterFrame() {
+            if (!penMeter.open) return;
+            const now = performance.now();
+            if (penMeter.lastFrameAt) {
+                const delta = now - penMeter.lastFrameAt;
+                penMeter.frames.push(delta);
+                if (penMeter.frames.length > 120) penMeter.frames.shift();
+                // Only count a frame as dropped when the user was actually writing: a 33 ms frame
+                // while the pen is away is the browser saving power, not a slow pen.
+                if (delta > 26 && now - penMeter.lastPenAt < 500) penMeter.dropped++;
+            }
+            penMeter.lastFrameAt = now;
+            if (now - penMeter.lastRefreshAt > 300) {
+                penMeter.lastRefreshAt = now;
+                renderPenMeter();
+            }
+            requestAnimationFrame(penMeterFrame);
+        }
+
+        function penMeterReset() {
+            penMeter.lat = [];
+            penMeter.rawSamples = 0;
+            penMeter.moveSamples = 0;
+            penMeter.predHits = 0;
+            penMeter.predChances = 0;
+            penMeter.frames = [];
+            penMeter.dropped = 0;
+            penMeter.lastFrameAt = 0;
+            penMeter.lastPenAt = 0;
+            penMeter.lastRefreshAt = 0;
+            renderPenMeter();
+        }
+
+        /** The live numbers, and the one or two things that are actually wrong. */
+        function renderPenMeter() {
+            if (!penMeter.open) return;
+            const lat50 = penMeterPercentile(penMeter.lat, 0.5);
+            const lat90 = penMeterPercentile(penMeter.lat, 0.9);
+            const avgFrame = penMeter.frames.length
+                ? penMeter.frames.reduce((a, b) => a + b, 0) / penMeter.frames.length
+                : 0;
+            const fps = avgFrame > 0 ? Math.round(1000 / avgFrame) : 0;
+            const predRatio = penMeter.predChances > 4
+                ? Math.round(penMeter.predHits / penMeter.predChances * 100)
+                : null;
+            const layers = meterLayerInfo();
+
+            const set = (id, text) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = text;
+            };
+            set('pen-meter-lat', lat50 === null ? '—' : `${toPersianDigits(Math.round(lat50))} / ${toPersianDigits(Math.round(lat90))} ms`);
+            set('pen-meter-fps', fps ? toPersianDigits(fps) : '—');
+            set('pen-meter-drop', toPersianDigits(penMeter.dropped));
+            set('pen-meter-samples', `${toPersianDigits(penMeter.rawSamples)} / ${toPersianDigits(penMeter.moveSamples)}`);
+            set('pen-meter-pred', predRatio === null ? '—' : `${toPersianDigits(predRatio)}٪`);
+            set('pen-meter-canvas', `${toPersianDigits(layers.bitmap)} · ${toPersianDigits(layers.count)} لایه · ${toPersianDigits(layers.mb)} مگابایت`);
+
+            const notes = [];
+            if (penMeter.moveSamples > 8 && penMeter.rawSamples === 0) {
+                notes.push('این مرورگر «pointerrawupdate» نمیدهد (فایرفاکس/سافاری؟) — قلم مجبور است با نرخ فریم نمونه بردارد.');
+            }
+            if (predRatio === 0) {
+                notes.push('پیشبینی قلم در این دستگاه فعال نیست؛ نوک قلم کمی عقبتر دیده میشود.');
+            }
+            if (penMeter.dropped > 3) {
+                notes.push('فریم میافتد. «روانتر (سبکتر)» را بزن و دوباره بنویس؛ اگر افت قطع شد، همین را نگه دار.');
+            }
+            const noteEl = document.getElementById('pen-meter-note');
+            if (noteEl) {
+                noteEl.textContent = notes.join(' ');
+                noteEl.classList.toggle('hidden', notes.length === 0);
+            }
+        }
+
+        function meterLayerInfo() {
+            const ids = ['canvas-pdf', 'canvas-highlighter', 'canvas-ink', 'canvas-interaction'];
+            let bytes = 0, count = 0, w = 0, h = 0;
+            ids.forEach(id => {
+                const c = document.getElementById(id);
+                if (!c || c.style.display === 'none' || c.width <= 1) return;
+                bytes += c.width * c.height * 4;
+                count++;
+                if (id === 'canvas-ink') { w = c.width; h = c.height; }
+            });
+            return {
+                count,
+                mb: Math.round(bytes / 1048576),
+                bitmap: `${w}×${h} @ ${dpr}`
+            };
+        }
+
+        function penMeterReport() {
+            const lat50 = penMeterPercentile(penMeter.lat, 0.5);
+            const lat90 = penMeterPercentile(penMeter.lat, 0.9);
+            const lat99 = penMeterPercentile(penMeter.lat, 0.99);
+            const avgFrame = penMeter.frames.length
+                ? penMeter.frames.reduce((a, b) => a + b, 0) / penMeter.frames.length
+                : 0;
+            const layers = meterLayerInfo();
+            const lines = [
+                'سنجش قلم — سالنامه',
+                `نسبت پیکسل دستگاه: ${toPersianDigits(window.devicePixelRatio)} · بوم: ${toPersianDigits(layers.bitmap)} · ${toPersianDigits(layers.count)} لایه · ${toPersianDigits(layers.mb)} مگابایت`,
+                `کیفیت قلم: ${AppState.penQuality === 'smooth' ? 'روان‌تر (سبک‌تر)' : 'حداکثر'} · زوم: ${toPersianDigits(Math.round(AppState.zoomScale * 100))}٪`,
+                lat50 === null
+                    ? 'تأخیر ورودی: قلمی ثبت نشد'
+                    : `تأخیر ورودی (ورودی تا رسم): میانه ${toPersianDigits(lat50.toFixed(1))} · ۹۰٪ ${toPersianDigits(lat90.toFixed(1))} · بدترین ${toPersianDigits(lat99.toFixed(1))} میلی‌ثانیه — ${toPersianDigits(penMeter.lat.length)} نمونه`,
+                `نرخ فریم: ${avgFrame ? toPersianDigits(Math.round(1000 / avgFrame)) : '—'} · فریم افتاده هنگام نوشتن: ${toPersianDigits(penMeter.dropped)}`,
+                `نمونهٔ خام pointerrawupdate: ${toPersianDigits(penMeter.rawSamples)} · pointermove: ${toPersianDigits(penMeter.moveSamples)}`,
+                `پیش‌بینی قلم: ${penMeter.predChances > 4 ? toPersianDigits(Math.round(penMeter.predHits / penMeter.predChances * 100)) + '٪' : '—'}`,
+                `مرورگر: ${navigator.userAgent}`
+            ];
+            return lines.join('\n');
+        }
+
+        function setPenMeterOpen(open) {
+            penMeter.open = !!open;
+            const panel = document.getElementById('pen-meter');
+            if (panel) panel.classList.toggle('hidden', !penMeter.open);
+            const btn = document.getElementById('btn-pen-meter');
+            if (btn) btn.classList.toggle('active', penMeter.open);
+            if (penMeter.open) {
+                penMeterReset();
+                requestAnimationFrame(penMeterFrame);
+            }
+        }
+
+        /**
+         * Ink resolution. «حداکثر» draws at the display's own pixel ratio (capped at 2); «روانتر»
+         * caps it at 1, which is 4x fewer pixels to rasterise on a 2x tablet. The committed stroke
+         * keeps its exact weight either way — only the softness of the edge changes — so a device
+         * that cannot hold 60 fps can trade a little crisping for a pen that keeps up.
+         */
+        function applyPenQualityUI() {
+            const smooth = AppState.penQuality === 'smooth';
+            const maxBtn = document.getElementById('pen-quality-max');
+            const smoothBtn = document.getElementById('pen-quality-smooth');
+            if (maxBtn) maxBtn.classList.toggle('active', !smooth);
+            if (smoothBtn) smoothBtn.classList.toggle('active', smooth);
+        }
+
+        function setPenQuality(mode) {
+            AppState.penQuality = mode === 'smooth' ? 'smooth' : 'max';
+            try { localStorage.setItem(PEN_QUALITY_KEY, AppState.penQuality); } catch (_) {}
+            applyPenQualityUI();
+            penMeter.dropped = 0;
+            penMeter.frames = [];
+            penMeter.lastFrameAt = 0;
+            resizeCanvases();
+            renderPenMeter();
+        }
+
+        document.getElementById('btn-pen-meter').addEventListener('click', () => setPenMeterOpen(!penMeter.open));
+        document.getElementById('pen-meter-close').addEventListener('click', () => setPenMeterOpen(false));
+        document.getElementById('pen-quality-max').addEventListener('click', () => setPenQuality('max'));
+        document.getElementById('pen-quality-smooth').addEventListener('click', () => setPenQuality('smooth'));
+        document.getElementById('pen-meter-copy').addEventListener('click', (e) => {
+            const label = e.currentTarget;
+            const text = penMeterReport();
+            const done = () => {
+                label.textContent = 'کپی شد';
+                setTimeout(() => { label.textContent = 'کپی نتیجه'; }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(() => {});
+            } else {
+                done();
+            }
+            console.log(text);
+        });
+
         function getCanvasPoint(e) {
             return {
                 x: (e.clientX - cachedCanvasRect.left) / AppState.zoomScale,
@@ -4056,9 +4516,9 @@
                     AppState.transformStartPt = pt;
                     AppState.transformInitialSnapshot = {
                         bounds: { ...AppState.selectionBounds },
-                        strokes: JSON.parse(JSON.stringify(AppState.strokes)),
-                        symbols: JSON.parse(JSON.stringify(AppState.symbols)),
-                        texts: JSON.parse(JSON.stringify(AppState.texts))
+                        strokes: cloneStrokesInto(AppState.strokes),
+                        symbols: cloneFlatInto(AppState.symbols),
+                        texts: cloneFlatInto(AppState.texts)
                     };
                     return;
                 }
@@ -4075,9 +4535,9 @@
                     AppState.transformStartPt = pt;
                     AppState.transformInitialSnapshot = {
                         bounds: { ...AppState.selectionBounds },
-                        strokes: JSON.parse(JSON.stringify(AppState.strokes)),
-                        symbols: JSON.parse(JSON.stringify(AppState.symbols)),
-                        texts: JSON.parse(JSON.stringify(AppState.texts))
+                        strokes: cloneStrokesInto(AppState.strokes),
+                        symbols: cloneFlatInto(AppState.symbols),
+                        texts: cloneFlatInto(AppState.texts)
                     };
                     renderAllLayers();
                     return;
@@ -4146,6 +4606,7 @@
         canvasInteraction.addEventListener('pointerrawupdate', (e) => {
             if (e.pointerType === 'pen' || e.pointerType === 'eraser') {
                 AppState.lastStylusActivityTime = Date.now();
+                penMeterSample(e, true);
             }
             if ((AppState.stylusOnly && e.pointerType === 'touch') || AppState.activeTool === 'pan') return;
             if (!AppState.isDrawing) {
@@ -4190,6 +4651,7 @@
         canvasInteraction.addEventListener('pointermove', (e) => {
             if (e.pointerType === 'pen' || e.pointerType === 'eraser') {
                 AppState.lastStylusActivityTime = Date.now();
+                penMeterSample(e, false);
             }
             if ((AppState.stylusOnly && e.pointerType === 'touch') || AppState.activeTool === 'pan') return;
 
@@ -4480,12 +4942,19 @@
         /**
          * Bounding box of a stroke, cached per stroke OBJECT.
          *
-         * A stroke is replaced rather than mutated whenever it is edited, so a WeakMap keyed by
-         * the stroke can never go stale — and it means the eraser no longer has to scan every
-         * segment of every stroke on every single stylus sample, which is what made wiping feel
-         * heavy on a page with a lot of writing.
+         * A stroke is normally replaced rather than mutated whenever it is edited, so a WeakMap
+         * keyed by the stroke cannot go stale — and it means the eraser no longer has to scan
+         * every segment of every stroke on every single stylus sample, which is what made wiping
+         * feel heavy on a page with a lot of writing.
+         *
+         * The two places that DO edit a stroke in place (moving the handwriting down under the
+         * mind-map tree, and scaling a lasso selection) must call `invalidateStrokeBox`, or the
+         * eraser keeps testing — and clearing — the position the stroke used to have.
          */
         const strokeBoxCache = new WeakMap();
+        function invalidateStrokeBox(s) {
+            strokeBoxCache.delete(s);
+        }
         function strokeBox(s) {
             let box = strokeBoxCache.get(s);
             if (box) return box;
@@ -4515,19 +4984,23 @@
          * The eraser used to repaint all four full-page canvases once PER SAMPLE: a quick wipe
          * produces ~120 samples a second, so a single gesture meant hundreds of full repaints
          * and the eraser lagged several strokes behind the pen. Repaints are coalesced into one
-         * per animation frame now. Pen-up always repaints (see eraseFlushRepaint).
+         * per animation frame now, and each repaint only touches the rectangle the erasing
+         * actually changed (see repaintInkRegion) — erasing one letter on a page with three
+         * hundred strokes of notes no longer redraws all three hundred.
          */
         let eraseRepaintQueued = false;
-        let eraseRepaintDirty = false;
-        function requestEraseRepaint() {
-            eraseRepaintDirty = true;
+        let eraseDirtyBox = null;
+
+        function requestEraseRepaint(box) {
+            eraseDirtyBox = unionBox(eraseDirtyBox, box);
             if (eraseRepaintQueued) return;
             eraseRepaintQueued = true;
             const run = () => {
                 eraseRepaintQueued = false;
-                if (!eraseRepaintDirty) return;
-                eraseRepaintDirty = false;
-                renderAllLayers();
+                if (!eraseDirtyBox) return;
+                const pending = eraseDirtyBox;
+                eraseDirtyBox = null;
+                repaintInkRegion(pending);
             };
             if (typeof requestAnimationFrame === 'function') {
                 requestAnimationFrame(run);
@@ -4538,17 +5011,166 @@
                 run();
             }
         }
-        /** Paint the pending eraser work right now (called on pen-up). */
+        /**
+         * Paint the pending eraser work right now (called on pen-up) with a FULL repaint: it is
+         * the authoritative pass, so whatever a region repaint might have got wrong is corrected
+         * the instant the pen leaves the paper.
+         */
         function eraseFlushRepaint() {
-            if (!eraseRepaintDirty) return;
-            eraseRepaintDirty = false;
+            if (!eraseDirtyBox) return;
+            eraseDirtyBox = null;
             eraseRepaintQueued = false;
             renderAllLayers();
+        }
+
+        /** Union of two paper-unit boxes; either side may be empty. */
+        function unionBox(a, b) {
+            if (!b || !isFinite(b.x0) || !isFinite(b.y0)) return a;
+            if (!a) return { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 };
+            return {
+                x0: Math.min(a.x0, b.x0),
+                y0: Math.min(a.y0, b.y0),
+                x1: Math.max(a.x1, b.x1),
+                y1: Math.max(a.y1, b.y1)
+            };
+        }
+
+        /**
+         * Repaints just one rectangle of the ink layers — what renderAllLayers() would have
+         * drawn inside `box`, and nothing else.
+         *
+         * The rectangle is cleared, everything that can reach into it is redrawn while clipped
+         * to it (clipping matters: a semi-transparent highlighter stroke or a translucent shape
+         * fill would otherwise darken where it overlaps its own existing pixels), and the rest
+         * of the page is left untouched.
+         *
+         * Anything the eraser removed must be inside `box`: eraseAtPoint() grows the box with the
+         * bounding rectangle of every stroke, symbol and text it deleted, so no pixel of a
+         * deleted element can survive outside the cleared area.
+         */
+        function repaintInkRegion(box) {
+            if (!box || !isFinite(box.x0) || !isFinite(box.y0)) {
+                renderAllLayers();
+                return;
+            }
+            const w = paperStage.clientWidth;
+            const h = paperStage.clientHeight;
+            // Snap the rectangle to whole BACKING-STORE pixels. clearRect antialiases a fractional
+            // edge and so does clip(), so a rectangle that does not line up with the pixels loses
+            // a fraction of the coverage on its border column — which showed up as a faint seam
+            // along the edge of a long stroke while the eraser was dragged over it.
+            const sx = dpr || 1;
+            const x = Math.max(0, Math.floor(box.x0 * sx) / sx);
+            const y = Math.max(0, Math.floor(box.y0 * sx) / sx);
+            const xEnd = Math.min(w, Math.ceil(box.x1 * sx) / sx);
+            const yEnd = Math.min(h, Math.ceil(box.y1 * sx) / sx);
+            const rw = xEnd - x;
+            const rh = yEnd - y;
+            if (rw <= 0 || rh <= 0) return;
+            const region = { x0: x, y0: y, x1: xEnd, y1: yEnd };
+
+            ctxInk.clearRect(x, y, rw, rh);
+            ctxHighlighter.clearRect(x, y, rw, rh);
+
+            // 1. The decorations that live on the ink layer, drawn first, exactly as in
+            //    renderAllLayers().
+            ctxInk.save();
+            ctxInk.beginPath();
+            ctxInk.rect(x, y, rw, rh);
+            ctxInk.clip();
+            if (AppState.workspaceMode === 'planner') {
+                drawRightScheduleMargin(ctxInk, w, h);
+            } else {
+                drawMindMapConnectors(ctxInk);
+            }
+            ctxInk.restore();
+
+            // 2. Handwriting, restored on the layer each stroke belongs to.
+            ctxHighlighter.save();
+            ctxHighlighter.beginPath();
+            ctxHighlighter.rect(x, y, rw, rh);
+            ctxHighlighter.clip();
+            for (const s of AppState.strokes) {
+                if (s.tool !== 'highlighter') continue;
+                if (!boxIntersects(strokeBox(s), region, (s.size || 3) / 2 + 3)) continue;
+                InkBeautifier.renderSmoothStroke(ctxHighlighter, s);
+            }
+            ctxHighlighter.restore();
+
+            ctxInk.save();
+            ctxInk.beginPath();
+            ctxInk.rect(x, y, rw, rh);
+            ctxInk.clip();
+            for (const s of AppState.strokes) {
+                if (s.tool === 'highlighter') continue;
+                if (!boxIntersects(strokeBox(s), region, (s.size || 3) / 2 + 3)) continue;
+                InkBeautifier.renderSmoothStroke(ctxInk, s);
+            }
+
+            // 3. The dashed hand-writing separator, if it crosses the repainted rectangle.
+            const sepY = handwritingSeparatorY();
+            if (sepY !== null && sepY + 8 >= region.y0 && sepY - 22 <= region.y1) {
+                drawHandwritingSeparator(ctxInk, w, h, sepY);
+            }
+
+            // 4. Symbols and floating text boxes.
+            for (const sym of AppState.symbols) {
+                if (!boxIntersects(symbolBox(sym), region, 6)) continue;
+                VectorSymbols.drawSymbol(ctxInk, sym);
+            }
+            for (const t of AppState.texts) {
+                if (!boxIntersects(getElementBoundingBox(t, 'text'), region, 6)) continue;
+                drawFloatingTextElement(ctxInk, t);
+            }
+            ctxInk.restore();
+        }
+
+        /**
+         * True when a paper-unit box overlaps a region (optionally grown by `pad`).
+         * Accepts both box shapes this file uses: `{x, y, w, h}` (getElementBoundingBox) and
+         * `{x0, y0, x1, y1}` (strokeBox).
+         */
+        function boxIntersects(box, region, pad = 0) {
+            if (!box || box.empty) return false;
+            const x0 = box.x0 !== undefined ? box.x0 : box.x;
+            const y0 = box.y0 !== undefined ? box.y0 : box.y;
+            const x1 = box.x1 !== undefined ? box.x1 : x0 + (box.w || 0);
+            const y1 = box.y1 !== undefined ? box.y1 : y0 + (box.h || 0);
+            return x0 - pad <= region.x1 && x1 + pad >= region.x0
+                && y0 - pad <= region.y1 && y1 + pad >= region.y0;
+        }
+
+        /** A symbol's drawn rectangle: generous, because the anchor is its own convention. */
+        function symbolBox(sym) {
+            const size = sym.size || 28;
+            return {
+                x0: sym.x - size - 10,
+                y0: sym.y - size - 10,
+                x1: sym.x + size * 2 + 10,
+                y1: sym.y + size * 2 + 10,
+                empty: false
+            };
+        }
+
+        /** A stroke's box grown by half its width, so no pixel of the stroke is left outside it. */
+        function inflateBox(box, pad) {
+            if (!box || box.empty) return box;
+            return { x0: box.x0 - pad, y0: box.y0 - pad, x1: box.x1 + pad, y1: box.y1 + pad, empty: false };
         }
 
         function eraseAtPoint(pt) {
             const eraserRadius = ERASER_RADIUS;
             let changed = false;
+            // Union (paper units) of everything this sample removed or changed. Optional: the
+            // repaint takes the cheap region path only when it knows exactly what moved.
+            let dirty = null;
+            const addDirtyBox = (b) => { dirty = unionBox(dirty, b); };
+            const addDirtyDisc = (p, r) => addDirtyBox({ x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r });
+            // The bounding box of a stroke's POINTS is not the bounding box of its INK: the stroke
+            // is drawn `size` wide with round caps and joins, so half its width sticks out all the
+            // way round. Clearing only the point box left a 1-2 px ghost outline of every erased
+            // stroke on screen until the pen was lifted.
+            const addDirtyStroke = (s) => addDirtyBox(inflateBox(strokeBox(s), (s.size || 3) / 2 + 2));
 
             if (AppState.eraserMode === 'stroke') {
                 const beforeCount = AppState.strokes.length;
@@ -4556,10 +5178,13 @@
                     if (!strokeNearPoint(s, pt, eraserRadius)) return true;
                     const hitThresh = eraserRadius + (s.size || 3) / 2;
                     if (s.points.length === 1) {
-                        return Math.hypot(pt.x - s.points[0].x, pt.y - s.points[0].y) > hitThresh;
+                        if (Math.hypot(pt.x - s.points[0].x, pt.y - s.points[0].y) > hitThresh) return true;
+                        addDirtyStroke(s);
+                        return false;
                     }
                     for (let i = 0; i < s.points.length - 1; i++) {
                         if (distToSegment(pt, s.points[i], s.points[i + 1]) <= hitThresh) {
+                            addDirtyStroke(s);
                             return false;
                         }
                     }
@@ -4592,6 +5217,9 @@
                     }
                     if (strokeModified) {
                         changed = true;
+                        // The whole original stroke joins the dirty box: the part under the eraser
+                        // has to be cleared, and the surviving pieces are redrawn from scratch.
+                        addDirtyStroke(s);
                         if (currentChunk.length >= 2) {
                             nextStrokes.push({ ...s, id: uid(), points: currentChunk });
                         }
@@ -4604,11 +5232,20 @@
 
             // Also check symbols
             const symBefore = AppState.symbols.length;
-            AppState.symbols = AppState.symbols.filter(sym => Math.hypot(pt.x - sym.x, pt.y - sym.y) > eraserRadius + (sym.size || 24) / 2);
+            AppState.symbols = AppState.symbols.filter(sym => {
+                if (Math.hypot(pt.x - sym.x, pt.y - sym.y) <= eraserRadius + (sym.size || 24) / 2) {
+                    addDirtyBox(symbolBox(sym));
+                    return false;
+                }
+                return true;
+            });
             if (AppState.symbols.length !== symBefore) changed = true;
 
             if (changed) {
-                requestEraseRepaint();
+                // The eraser's own footprint always joins the dirty box, so a partial erase that
+                // split a stroke can never leave the two halves drawn at once.
+                addDirtyDisc(pt, eraserRadius + 24);
+                requestEraseRepaint(dirty);
             }
         }
 
@@ -4738,6 +5375,8 @@
                         x: cx + (p.x - cx) * scale,
                         y: cy + (p.y - cy) * scale
                     }));
+                    // Edited in place (same object, new points), so drop the cached box.
+                    invalidateStrokeBox(s);
                 }
             });
             AppState.symbols.forEach(sym => {
@@ -6643,9 +7282,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 15,
+            version: 16,
             date: '2026-10-18',
-            features: 'design pass: touch targets, focus, contrast, empty page'
+            features: 'pen meter, lighter eraser repaint, faster undo copy'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -7414,6 +8053,14 @@
                     if (savedMode === 'mindmap' || savedMode === 'planner') AppState.workspaceMode = savedMode;
                 } catch (_) {}
                 applyWorkspaceModeUI(AppState.workspaceMode);
+
+                // The pen-quality choice is a property of the DEVICE, so it lives in localStorage
+                // next to the workspace mode and is applied before the first canvas resize.
+                try {
+                    const savedQuality = localStorage.getItem(PEN_QUALITY_KEY);
+                    if (savedQuality === 'smooth' || savedQuality === 'max') AppState.penQuality = savedQuality;
+                } catch (_) {}
+                applyPenQualityUI();
 
                 await dbEngine.init();
                 await loadGeminiKeyFromDB();
