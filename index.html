@@ -22,12 +22,24 @@
     <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
     <style>
         :root {
+            --bg-desk: #EDF1F6;         /* the surface the sheet of paper lies on */
             --bg-app: #F8FAFC;
             --bg-paper: #FDFBF7;
             --line-color: #E2E8F0;
             --accent: #0F172A;
             --primary: #2563EB;
             --border-subtle: #E2E8F0;
+
+            /* One shared scale for every raised surface, so a card, a dock and a modal all look
+               like they sit at consistent heights above the page instead of three different UIs. */
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+            --shadow-2: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+            --shadow-3: 0 18px 48px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.06);
+            --sheet: 0 1px 2px rgba(15, 23, 42, 0.05), 0 14px 44px rgba(15, 23, 42, 0.10);
+            --ring: #2563EB;
         }
 
         * {
@@ -46,6 +58,35 @@
             overflow: hidden;
             background-color: var(--bg-app);
             color: #1E293B;
+            /* Persian digits are proportional by default, so a counter, a page number or a time
+               visibly jitters as it changes. Tabular figures keep the header calm. */
+            font-variant-numeric: tabular-nums;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+        }
+
+        ::selection {
+            background: rgba(37, 99, 235, 0.18);
+        }
+
+        /* Keyboard users get a ring; a stylus or finger never sees one, because the pen already
+           shows where you are and a ring on every tap reads as a rendering bug. */
+        :focus-visible {
+            outline: 2px solid var(--ring);
+            outline-offset: 2px;
+            border-radius: 6px;
+        }
+
+        /* Someone who asked their device for less motion should get none of it. Without this,
+           every hover/press transition in the app still fires for them. */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+                scroll-behavior: auto !important;
+            }
         }
 
         /* Clean custom scrollbars for modals */
@@ -83,13 +124,34 @@
             background-color: var(--bg-paper);
         }
 
-        /* Tool button active states */
+        /* Tool buttons: one consistent hit area, a real press, and a visible focus ring. */
         .tool-btn {
-            transition: all 0.15s ease;
+            transition: background-color 0.15s ease, border-color 0.15s ease,
+                        color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
             border: 1px solid transparent;
+            /* The smallest thing a human should have to hit — and a stylus on a moving tablet
+               needs more room than a mouse does, which the coarse-pointer rule below gives it. */
+            min-width: 34px;
+            min-height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
         }
         .tool-btn:hover {
             background-color: #F1F5F9;
+        }
+        /* Pressing has to be felt, not just seen. This is most of the difference between a web
+           page and a drawing tool. */
+        .tool-btn:active {
+            transform: scale(0.96);
+        }
+        @media (pointer: coarse) {
+            .tool-btn {
+                min-width: 42px;
+                min-height: 42px;
+            }
         }
         .tool-btn.active {
             background-color: #EFF6FF;
@@ -114,6 +176,10 @@
             overflow: auto;
             -webkit-overflow-scrolling: touch;
             touch-action: none;
+            /* The desk the sheet lies on. A shade deeper than the paper is what makes the paper
+               read as an object with an edge instead of a white area of the screen. */
+            background-color: var(--bg-desk);
+            padding: 18px 16px;
         }
 
         @media (max-width: 768px) {
@@ -128,6 +194,10 @@
             width: 1450px;
             min-width: 100%;
             height: 1950px;
+            /* The paper is the one object the whole app is about, so it is the only thing that
+               casts a real shadow: a sheet lying on the desk, not another rounded web card. */
+            box-shadow: var(--sheet);
+            background-clip: padding-box;
             /* Zoom is applied with the CSS `zoom` property, NOT `transform: scale()`.
                `transform` does not change an element's LAYOUT size, so the scroller still
                believed the paper was 1450x1950 while it was visually 2900x3900: everything
@@ -182,9 +252,18 @@
             padding: 8px 4px;
             background: #FFFFFF;
             border: 1px solid #E2E8F0;
-            border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-2);
             overflow-y: auto;
+        }
+
+        /* The dock holds the tools that get tapped hundreds of times a lesson, so its buttons are
+           the largest target in the app — a 44px square, the comfortable minimum for a stylus or a
+           fingertip, in a 52px dock. */
+        #left-tool-dock .tool-btn {
+            width: 42px;
+            height: 42px;
+            flex: 0 0 auto;
         }
 
         /* Responsive Mobile Bottom Dock */
@@ -682,7 +761,19 @@
 
     <!-- MAIN WRITING CANVAS AREA (Scrollable 2x Paper Height) -->
     <main id="canvas-viewport" class="bg-slate-200/60">
-        <div id="paper-stage" class="paper-lined shadow-sm">
+        <div id="paper-stage" class="paper-lined">
+            <!-- An empty page with no instruction is the least designed part of any app. This is
+                 one calm line that also teaches the flow that is hardest to discover: write, then
+                 build the tree from your own handwriting. It hides itself the moment anything is
+                 written, and it never takes a pointer event. -->
+            <div id="paper-empty-hint" class="absolute inset-x-0 top-0 pt-20 flex justify-center pointer-events-none z-[1]">
+                <div class="text-center max-w-[390px] px-5">
+                    <div class="text-[13px] font-bold text-slate-600">همین‌جا با قلم بنویس</div>
+                    <div id="paper-empty-hint-body" class="mt-1.5 text-[12px] leading-relaxed text-slate-500">
+                        هر خط یک کارت می‌شود و تودرتو بودن خط‌ها، شاخه‌ها را می‌سازد. بعد از نوشتن، در حالت «درخت‌واره خلاصه دروس» دکمهٔ «ساخت درخت از دست‌خط خودم» را بزن.
+                    </div>
+                </div>
+            </div>
             <!-- Layer 0: PDF Document Background Canvas (When PDF Annotator is active) -->
             <canvas id="canvas-pdf" class="pointer-events-none"></canvas>
             <!-- Layer 1: True Layered Highlighter Canvas (Hardware-accelerated opacity without heavy blend lag) -->
@@ -2412,6 +2503,33 @@
             document.getElementById('btn-redo').disabled = AppState.redoStack.length === 0;
         }
 
+        /**
+         * The empty-page hint. Checked from renderAllLayers (which runs on every repaint), so it
+         * only touches the DOM when the answer actually changes.
+         */
+        let emptyHintShown = null;
+        function updatePaperEmptyHint() {
+            const hint = document.getElementById('paper-empty-hint');
+            if (!hint) return;
+            const inMindmap = AppState.workspaceMode === 'mindmap';
+            const cards = (AppState.mindmapData.nodes || []).length;
+            const inkCount = inMindmap
+                ? (AppState.mindmapData.strokes || []).length
+                : (AppState.strokes || []).length;
+            const shouldShow = inkCount === 0 && (!inMindmap || cards === 0);
+            if (shouldShow === emptyHintShown) return;
+            emptyHintShown = shouldShow;
+            hint.classList.toggle('hidden', !shouldShow);
+            if (!shouldShow) return;
+            // The aim is different in each workspace — say the right one, don't describe the app.
+            const body = document.getElementById('paper-empty-hint-body');
+            if (body) {
+                body.textContent = inMindmap
+                    ? 'اینجا بنویس یا دست‌خطی که در صفحهٔ برنامه‌ریزی کشیده‌ای را به کارت تبدیل کن. دکمهٔ «ساخت درخت از دست‌خط خودم» هر خط را یک کارت می‌کند و تودرتو بودن خط‌ها، شاخه‌ها را می‌سازد.'
+                    : 'هر خط یک کارت می‌شود و تودرتو بودن خط‌ها، شاخه‌ها را می‌سازد. بعد از نوشتن، در حالت «درخت‌واره خلاصه دروس» دکمهٔ «ساخت درخت از دست‌خط خودم» را بزن.';
+            }
+        }
+
         let saveTimeout = null;
         let pendingSaveKey = null;
 
@@ -2451,6 +2569,7 @@
         function scheduleSavePage() {
             syncActiveBuffersToStorage();
             updateMindMapBadge();
+            updatePaperEmptyHint();
             setSaveIndicator('saving');
             clearTimeout(saveTimeout);
             // The day key is captured NOW. It used to be read when the timer fired, so changing
@@ -2680,8 +2799,7 @@
 
         function updateMindMapBadge() {
             const badge = document.getElementById('badge-mindmap-count');
-            const count = (AppState.mindmapData.nodes || []).length;
-            if (count > 0) {
+            const count = (AppState.mindmapData.nodes || []).length;            if (count > 0) {
                 badge.textContent = toPersianDigits(count);
                 badge.classList.remove('hidden');
             } else {
@@ -6520,9 +6638,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 14,
+            version: 15,
             date: '2026-10-18',
-            features: 'automatic recovery copies + backup folder'
+            features: 'design pass: touch targets, focus, contrast, empty page'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -6717,6 +6835,10 @@
             syncPriorityInputs();
             applyPaperClass();
             updateMindMapBadge();
+            // A freshly loaded day must show (or hide) the empty-page hint for ITS content, not
+            // keep the answer from the day that was on screen before.
+            emptyHintShown = null;
+            updatePaperEmptyHint();
 
             await loadPdfFromBase64(AppState.pdfDataBase64, AppState.pdfPageNum);
             renderMindMapDOMNodes();
@@ -7133,7 +7255,7 @@
         }
 
         /** Replaces the planner with one of the automatic copies. The current state is saved first. */
-        async function restoreSnapshot(id) {
+        async function restoreBackupSnapshot(id) {
             try {
                 const snaps = await backupStore.allSnapshots();
                 const snap = snaps.find(s => s.id === id);
@@ -7167,7 +7289,7 @@
             if (!btn) return;
             const id = btn.getAttribute('data-restore-snapshot');
             if (confirm('سالنامه به این نسخه بازیگردانی شود؟ وضعیت فعلی هم به‌عنوان یک نسخه ذخیره می‌شود.')) {
-                restoreSnapshot(id);
+                restoreBackupSnapshot(id);
             }
         });
 

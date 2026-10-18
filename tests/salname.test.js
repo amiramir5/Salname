@@ -713,6 +713,16 @@ ok('the recovery panel is reachable from the sync modal',
 ok('the user is told the truth about cloud services',
     html.includes('Supabase') && html.includes('وقتی اینترنت قطع'));
 
+// A function declaration is hoisted and the LAST one with a given name wins, so a duplicate name
+// silently disables the first function. This really happened: a backup helper named
+// restoreSnapshot shadowed the undo/redo restore and quietly broke Ctrl+Z.
+const declNames = [...html.matchAll(/\n {8}(?:async )?function ([A-Za-z0-9_$]+)\s*\(/g)].map(m => m[1]);
+const dupNames = [...new Set(declNames.filter((n, i) => declNames.indexOf(n) !== i))];
+check('no top-level function name is declared twice', dupNames, []);
+ok('undo/redo still calls its own restore, not the backup one',
+    /restoreSnapshot\(prev\)/.test(html) && /restoreSnapshot\(next\)/.test(html) &&
+    html.includes('restoreBackupSnapshot('));
+
 
 /* ------------------------------------------------------------------ */
 console.log('\n' + pass + ' passed, ' + failures.length + ' failed');
