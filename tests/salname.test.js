@@ -723,6 +723,56 @@ ok('undo/redo still calls its own restore, not the backup one',
     /restoreSnapshot\(prev\)/.test(html) && /restoreSnapshot\(next\)/.test(html) &&
     html.includes('restoreBackupSnapshot('));
 
+/* ------------------------------------------------------------------ *
+ * 11. Interface quality: touch, focus, motion, contrast, empty page
+ * ------------------------------------------------------------------ */
+console.log('\n--- 11. interface quality ---');
+
+// One token scale, so a card, a dock and a modal all sit at consistent heights.
+ok('depth and radius come from shared tokens',
+    html.includes('--radius-md:') && html.includes('--shadow-2:') && html.includes('var(--shadow-2)'));
+ok('the paper is the one element with a real shadow',
+    /#paper-stage[\s\S]{0,600}box-shadow: var\(--sheet\)/.test(html));
+
+// Keyboard users need a ring; a stylus user must never see one (the pen already shows where it is).
+ok('focus is visible for keyboard users', html.includes(':focus-visible'));
+ok('motion is reduced when the device asks for it',
+    html.includes('prefers-reduced-motion') && /animation-duration: 0\.001ms !important/.test(html));
+
+// A stylus on a moving tablet needs a bigger target than a mouse does.
+ok('tool buttons have a minimum hit area', /\.tool-btn\s*\{[\s\S]{0,700}min-height: 34px/.test(html));
+ok('...and a bigger one on a touch screen',
+    /@media \(pointer: coarse\)[\s\S]{0,160}min-height: 42px/.test(html));
+ok('...with a press you can feel', /\.tool-btn:active\s*\{[\s\S]{0,80}scale\(0\.96\)/.test(html));
+ok('the tools that get tapped most are the biggest targets',
+    /#left-tool-dock \.tool-btn\s*\{[\s\S]{0,120}height: 42px/.test(html));
+
+// Persian numerals are proportional by default, so counters and dates jitter as they change.
+ok('numbers do not jitter as they change', /font-variant-numeric: tabular-nums/.test(html));
+
+// An empty page that says nothing is the least designed part of the app.
+ok('an empty page says what to do',
+    html.includes('id="paper-empty-hint"') && html.includes('همین‌جا با قلم بنویس'));
+ok('...without ever swallowing a stylus event',
+    /id="paper-empty-hint"[^>]*pointer-events-none/.test(html));
+ok('...and it hides itself once anything is written',
+    /function updatePaperEmptyHint\(\)[\s\S]{0,900}inkCount === 0/.test(html) &&
+    html.includes('hint.classList.toggle') &&
+    html.includes('updatePaperEmptyHint();'));
+ok('the hint text is legible, not washed out',
+    /id="paper-empty-hint-body" class="[^"]*text-slate-5/.test(html));
+
+// Five competing accent colours in a 46px bar made the chrome louder than the page.
+ok('the header does not shout: the AI and sync buttons are neutral',
+    /id="btn-ai-modal" class="[^"]*text-slate-700[^"]*border-slate-200/.test(html) &&
+    /id="btn-sync-modal" class="[^"]*text-slate-700[^"]*border-slate-200/.test(html));
+ok('...and no header button is filled with a competing accent',
+    !/id="btn-ai-modal" class="[^"]*bg-purple/.test(html) &&
+    !/id="btn-sync-modal" class="[^"]*bg-blue/.test(html) &&
+    !/id="btn-export" class="[^"]*bg-slate-900/.test(html));
+ok('...and colour is kept for meaning, not decoration',
+    html.includes('text-violet-600') && html.includes('text-blue-600'));
+
 
 /* ------------------------------------------------------------------ */
 console.log('\n' + pass + ' passed, ' + failures.length + ' failed');

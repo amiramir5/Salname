@@ -571,16 +571,19 @@
             </div>
 
             <!-- Gemini AI Handwriting Analyzer & API Key Settings Button -->
-            <button id="btn-ai-modal" class="tool-btn px-2 py-1 rounded-md text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 flex items-center gap-1 hover:bg-purple-100 transition" title="تحلیل دست‌خط با هوش مصنوعی جمنای و تنظیم کلید API">
-                <svg class="w-3.5 h-3.5 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- One accent colour for the chrome is enough: the tint lives on the ICON, so the
+                 header reads as a calm row of tools instead of five competing coloured pills,
+                 and the colour still says which capability each button belongs to. -->
+            <button id="btn-ai-modal" class="tool-btn px-2 py-1 rounded-md text-[11px] font-semibold text-slate-700 border border-slate-200 flex items-center gap-1 hover:bg-slate-50 transition" title="تحلیل دست‌خط با هوش مصنوعی جمنای و تنظیم کلید API">
+                <svg class="w-3.5 h-3.5 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z"></path>
                 </svg>
                 <span class="hidden sm:inline">هوش مصنوعی (Gemini)</span>
             </button>
 
             <!-- Cross-Device Backup / Restore (Mobile <-> Tablet Sync) -->
-            <button id="btn-sync-modal" class="tool-btn px-2 py-1 rounded-md text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-200 flex items-center gap-1" title="انتقال و همگام‌سازی بین تبلت و موبایل">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <button id="btn-sync-modal" class="tool-btn px-2 py-1 rounded-md text-[11px] font-medium text-slate-700 border border-slate-200 flex items-center gap-1 hover:bg-slate-50" title="انتقال و همگام‌سازی بین تبلت و موبایل">
+                <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                     <path d="M3 3v5h5"></path>
                     <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
@@ -590,8 +593,10 @@
             </button>
 
             <!-- Export PNG -->
-            <button id="btn-export" class="tool-btn px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-900 text-white hover:bg-slate-800 flex items-center gap-1" title="دانلود تصویر باکیفیت صفحه">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Not filled and not dark: this is a utility, not the app's primary action, and a
+                 black button in the corner made it look like the thing to press. -->
+            <button id="btn-export" class="tool-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 flex items-center gap-1" title="دانلود تصویر باکیفیت صفحه">
+                <svg class="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7 10 12 15 17 10"></polyline>
                     <line x1="12" y1="15" x2="12" y2="3"></line>
