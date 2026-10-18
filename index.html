@@ -940,6 +940,34 @@
                 </button>
             </div>
             <div id="sync-status-msg" class="mt-3 text-center text-xs font-medium text-emerald-600 hidden"></div>
+
+            <!-- Automatic recovery: versioned copies inside the browser + a JSON file in a folder -->
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between gap-2">
+                    <h4 class="text-xs font-bold text-slate-800">پشتیبان‌گیری خودکار</h4>
+                    <span id="backup-folder-status" class="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">پوشه‌ای انتخاب نشده</span>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                    ذخیره اصلی روی همین دستگاه است، پس سالنامه با اینترنت قطع هم کامل کار می‌کند. برای اینکه خراب شدن دستگاه هم سالنامه را از بین نبرد، یک پوشه انتخاب کن تا نسخه پشتیبان به‌صورت خودکار در آن نوشته شود. اگر آن پوشه داخل یک پوشه ابری باشد (مثل <span class="font-semibold">OneDrive</span> یا <span class="font-semibold">Google Drive</span>)، خود سیستم وقتی اینترنت بود آن را هم به ابر می‌فرستد — بدون نیاز به هیچ سروری از طرف این برنامه.
+                </p>
+                <div class="mt-2.5 flex flex-wrap gap-2">
+                    <button id="btn-backup-folder" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-semibold transition">انتخاب پوشه پشتیبان</button>
+                    <button id="btn-backup-grant" class="hidden px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[11px] font-semibold transition">اجازه نوشتن در پوشه</button>
+                    <button id="btn-backup-now" class="hidden px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-[11px] font-semibold transition">پشتیبان‌گیری همین حالا</button>
+                    <button id="btn-backup-snapshot" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-[11px] font-semibold transition">ساخت نسخه بازیابی</button>
+                </div>
+                <div id="backup-status-msg" class="mt-2 text-[11px] font-medium text-slate-500"></div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <h4 class="text-xs font-bold text-slate-800">نسخه‌های بازیابی خودکار</h4>
+                <p class="text-[11px] text-slate-500 mt-1 leading-relaxed">اگر یک روز اشتباهی بخشی از نوشته‌ها پاک شد، از این نسخه‌ها می‌توانی برگردانی.</p>
+                <div id="snapshot-list" class="mt-2 space-y-1.5 max-h-40 overflow-y-auto"></div>
+            </div>
+
+            <p class="mt-3 text-[10px] leading-relaxed text-slate-400">
+                درباره سرویس‌های ابری (مثل Supabase): هر سرویس ابری برای کار کردن به اینترنت نیاز دارد؛ وقتی اینترنت قطع یا ملی شود در دسترس نیست و نمی‌تواند تنها پشتیبان سالنامه باشد. به همین دلیل ترتیب امنیت این است: حافظه خود دستگاه، بعد پوشه پشتیبان، و ابر فقط به‌عنوان یک لایه اضافه.
+            </p>
         </div>
     </div>
 
@@ -1522,6 +1550,144 @@
         }
 
         const dbEngine = new PlannerDatabase();
+
+        /**
+         * ============================================================================
+         * 3.1  BACKUP STORE — a SEPARATE database for recovery copies and settings
+         * ============================================================================
+         *
+         * The user's fear is real: «من می‌ترسم یهو سیستمم خراب شه». Two things can destroy
+         * a year of writing:
+         *   a) the page store is overwritten in place on every save, so a bad save (or a
+         *      mis-drawn stroke that wipes a card) has nothing to fall back to;
+         *   b) the browser's storage belongs to the DEVICE. If the tablet dies, it is gone.
+         *
+         * This class answers (a) with versioned snapshots. (b) is answered by writing a plain
+         * JSON file into a folder the user picks (see writeFolderBackup) — which also covers
+         * the offline case, because a file on the device needs no network at all, and becomes
+         * an off-device copy for free when that folder is a cloud-synced one.
+         *
+         * It deliberately lives in its OWN database rather than as a new store inside the
+         * planner database: opening an existing database at a higher version is BLOCKED while
+         * another tab (or another window of this app) still holds it open, and a blocked
+         * upgrade would freeze startup for a user who simply has the app open twice. Nothing
+         * here can therefore ever put the existing pages at risk.
+         */
+        class BackupStore {
+            constructor() {
+                this.dbName = 'Salnameh_BackupDB';
+                this.snapshotStore = 'snapshots';
+                this.settingsStore = 'settings';
+                this.db = null;
+            }
+
+            async init() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open(this.dbName, 1);
+                    req.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(this.snapshotStore)) {
+                            db.createObjectStore(this.snapshotStore, { keyPath: 'id' });
+                        }
+                        if (!db.objectStoreNames.contains(this.settingsStore)) {
+                            db.createObjectStore(this.settingsStore, { keyPath: 'key' });
+                        }
+                    };
+                    req.onsuccess = (e) => { this.db = e.target.result; resolve(); };
+                    req.onerror = (e) => reject(e.target.error);
+                });
+            }
+
+            async putSnapshot(record) {
+                if (!this.db) await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(this.snapshotStore, 'readwrite');
+                    tx.objectStore(this.snapshotStore).put(record);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = (e) => reject(e);
+                });
+            }
+
+            async allSnapshots() {
+                if (!this.db) await this.init();
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction(this.snapshotStore, 'readonly');
+                    const req = tx.objectStore(this.snapshotStore).getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => resolve([]);
+                });
+            }
+
+            async deleteSnapshot(id) {
+                if (!this.db) await this.init();
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction(this.snapshotStore, 'readwrite');
+                    tx.objectStore(this.snapshotStore).delete(id);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => resolve();
+                });
+            }
+
+            async getSetting(key) {
+                try {
+                    if (!this.db) await this.init();
+                    return await new Promise((resolve) => {
+                        const tx = this.db.transaction(this.settingsStore, 'readonly');
+                        const req = tx.objectStore(this.settingsStore).get(key);
+                        req.onsuccess = () => resolve(req.result ? req.result.value : null);
+                        req.onerror = () => resolve(null);
+                    });
+                } catch (_) {
+                    return null;
+                }
+            }
+
+            async setSetting(key, value) {
+                try {
+                    if (!this.db) await this.init();
+                    return await new Promise((resolve) => {
+                        const tx = this.db.transaction(this.settingsStore, 'readwrite');
+                        tx.objectStore(this.settingsStore).put({ key, value });
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = () => resolve();
+                    });
+                } catch (_) {
+                    return;
+                }
+            }
+        }
+
+        const backupStore = new BackupStore();
+
+        /** How many automatic recovery copies are kept. Old ones are dropped, newest first. */
+        const MAX_SNAPSHOTS = 8;
+        /** At most one automatic snapshot in this window (and only when something changed). */
+        const SNAPSHOT_MIN_GAP_MS = 20 * 60 * 1000;
+        /** At most one write of the folder backup in this window, unless forced. */
+        const FOLDER_BACKUP_MIN_GAP_MS = 90 * 1000;
+
+        /** djb2. Only used to notice that something changed, so it does not need to be strong. */
+        function hashText(text) {
+            let h = 5381;
+            for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+            return h.toString(36);
+        }
+
+        /**
+         * The pages that may be copied into a backup file. The Gemini API key is stored as a
+         * page under a reserved key; an automatic background file is no place for the user's
+         * secret, so it is left out (the manual export is deliberately untouched).
+         */
+        function backupSafePages(pages) {
+            return (pages || []).filter(p => p && p.dateKey && p.dateKey !== GEMINI_SETTINGS_KEY);
+        }
+
+        function snapshotSummary(snap) {
+            const pages = (snap && snap.pages) || [];
+            let strokes = 0;
+            pages.forEach(p => { strokes += (p.strokes || []).length; });
+            return { pages: pages.length, strokes };
+        }
 
         /**
          * Helper: Generate Vector Points for Geometric Shapes (Rect, Square, Circle, Triangle, Line, Arrow)
@@ -2298,6 +2464,10 @@
                 try {
                     await dbEngine.savePage(buildPagePayload(dateKey));
                     setSaveIndicator('saved');
+                    // Only after a write that really succeeded: the recovery copy and the folder
+                    // file both mirror the database, so a failed save must never trigger them.
+                    maybeAutoSnapshot('ذخیره خودکار');
+                    writeFolderBackup(false);
                 } catch (err) {
                     // A failed write used to be an unhandled rejection that left the header
                     // saying «در حال ذخیره...» forever, so the user believed it was saved.
@@ -6350,9 +6520,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 13,
+            version: 14,
             date: '2026-10-18',
-            features: 'smarter tree: indent levels, branch colours, dots never split'
+            features: 'automatic recovery copies + backup folder'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -6662,6 +6832,10 @@
         document.getElementById('btn-sync-modal').addEventListener('click', () => {
             document.getElementById('sync-status-msg').classList.add('hidden');
             document.getElementById('modal-sync').classList.remove('hidden');
+            // Both panels read live state (the folder permission can be revoked from outside the
+            // app, and a snapshot may have been taken since the modal was last opened).
+            renderSnapshotList();
+            updateBackupUI();
         });
         document.getElementById('btn-close-sync').addEventListener('click', () => {
             document.getElementById('modal-sync').classList.add('hidden');
@@ -6690,6 +6864,9 @@
                 try {
                     const parsed = JSON.parse(ev.target.result);
                     if (Array.isArray(parsed)) {
+                        // The file about to be imported replaces the planner. Keep what is here
+                        // now, so a wrong file (an old day, someone else's export) is undoable.
+                        await takeSnapshot('پیش از بارگذاری فایل', true);
                         await dbEngine.importAllPages(parsed);
                         await loadGeminiKeyFromDB();
                         await loadDayPage(AppState.currentDateKey);
@@ -6703,6 +6880,314 @@
             };
             reader.readAsText(file);
         });
+
+        /**
+         * ============================================================================
+         * 16.1  REAL DATA-LOSS PROTECTION
+         * ============================================================================
+         *
+         * Three layers, in the order they protect the user:
+         *
+         *   1. IndexedDB (already there) — what the app reads and writes every day.
+         *   2. Versioned automatic snapshots, kept IN the browser. A mis-drawn stroke, a
+         *      mis-clicked «پاک کردن» or a bad save can be rolled back to an earlier copy.
+         *      These protect against mistakes, not against the device dying.
+         *   3. A plain JSON file written into a folder the user picks. This is the one that
+         *      survives the tablet breaking or the browser data being cleared, and it needs
+         *      NO network: put it in a cloud-synced folder (OneDrive / Google Drive / Dropbox)
+         *      and the operating system uploads it when there is a connection.
+         *
+         * Where a cloud service stands: Supabase/Firebase cannot be the safety net. When the
+         * internet is cut or goes national there is nothing to reach, and in an app that ships
+         * as a single static file any key it held would be public. That is why the copy that
+         * matters here is a local file: it works with the network down, which is exactly the
+         * case the user is worried about.
+         */
+        let backupDirHandle = null;
+        let lastSnapshotAt = 0;
+        let lastSnapshotHash = '';
+        let lastFolderBackupAt = 0;
+        let backupFolderState = 'none';   // none | needs-permission | ready | error
+
+        /** Keeps the newest MAX_SNAPSHOTS copies and deletes the rest. */
+        async function pruneSnapshots() {
+            try {
+                const all = await backupStore.allSnapshots();
+                if (all.length <= MAX_SNAPSHOTS) return;
+                all.sort((a, b) => (b.at || 0) - (a.at || 0));
+                for (const old of all.slice(MAX_SNAPSHOTS)) await backupStore.deleteSnapshot(old.id);
+            } catch (err) {
+                console.error('Snapshot pruning failed:', err);
+            }
+        }
+
+        /**
+         * Stores a copy of everything, unless the newest copy is already identical.
+         * Returns the snapshot id, or null when nothing was written.
+         */
+        async function takeSnapshot(label, force = false) {
+            try {
+                const pages = backupSafePages(await dbEngine.exportAllPages());
+                if (pages.length === 0) return null;
+                const hash = hashText(JSON.stringify(pages));
+                if (!force) {
+                    if (hash === lastSnapshotHash) return null;
+                    const all = await backupStore.allSnapshots();
+                    if (all.some(s => s.hash === hash)) { lastSnapshotHash = hash; return null; }
+                }
+                const record = { id: 'snap_' + Date.now() + '_' + Math.floor(Math.random() * 1e4), at: Date.now(), label: label || '', hash, pages };
+                await backupStore.putSnapshot(record);
+                lastSnapshotHash = hash;
+                lastSnapshotAt = record.at;
+                await pruneSnapshots();
+                renderSnapshotList();
+                return record.id;
+            } catch (err) {
+                console.error('Snapshot failed:', err);
+                return null;
+            }
+        }
+
+        /** Called after a successful save. Cheap when it is not time for a copy yet. */
+        async function maybeAutoSnapshot(label) {
+            if (Date.now() - lastSnapshotAt < SNAPSHOT_MIN_GAP_MS) return null;
+            // Stamped first: a slow copy must not let the next save queue another one.
+            lastSnapshotAt = Date.now();
+            return await takeSnapshot(label || 'خودکار');
+        }
+
+        async function writeFileToDir(dir, name, text) {
+            const fileHandle = await dir.getFileHandle(name, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+        }
+
+        /**
+         * Writes the whole planner into the chosen folder. Two files: a rolling one that always
+         * mirrors the current state, and a dated one so yesterday's good state is still there.
+         */
+        async function writeFolderBackup(force = false) {
+            if (!backupDirHandle) return false;
+            if (!force && Date.now() - lastFolderBackupAt < FOLDER_BACKUP_MIN_GAP_MS) return false;
+            lastFolderBackupAt = Date.now();
+            try {
+                const perm = await backupDirHandle.queryPermission({ mode: 'readwrite' });
+                if (perm !== 'granted') {
+                    backupFolderState = 'needs-permission';
+                    updateBackupUI();
+                    return false;
+                }
+                const pages = backupSafePages(await dbEngine.exportAllPages());
+                if (pages.length === 0) return false;
+                const payload = JSON.stringify({
+                    app: 'Salnameh',
+                    build: APP_BUILD.version,
+                    savedAt: new Date().toISOString(),
+                    pages
+                });
+                await writeFileToDir(backupDirHandle, 'Salnameh_Latest.json', payload);
+                await writeFileToDir(backupDirHandle, `Salnameh_${AppState.currentDateKey}.json`, payload);
+                await backupStore.setSetting('lastFolderBackupAt', Date.now());
+                backupFolderState = 'ready';
+                updateBackupUI();
+                return true;
+            } catch (err) {
+                console.error('Folder backup failed:', err);
+                backupFolderState = 'error';
+                updateBackupUI();
+                return false;
+            }
+        }
+
+        /** Restores the desktop-style folder handle saved earlier and re-checks its permission. */
+        async function loadBackupFolder() {
+            try {
+                const handle = await backupStore.getSetting('backupDir');
+                if (!handle || typeof handle.queryPermission !== 'function') {
+                    backupFolderState = 'none';
+                    updateBackupUI();
+                    return;
+                }
+                backupDirHandle = handle;
+                const perm = await handle.queryPermission({ mode: 'readwrite' });
+                backupFolderState = perm === 'granted' ? 'ready' : 'needs-permission';
+            } catch (err) {
+                console.error('Backup folder could not be restored:', err);
+                backupFolderState = 'none';
+            }
+            updateBackupUI();
+        }
+
+        /**
+         * The File System Access API. A page may only be granted write access from a real tap,
+         * which is why this is bound to a button and not done automatically at startup.
+         */
+        async function chooseBackupFolder() {
+            if (typeof window.showDirectoryPicker !== 'function') {
+                setBackupStatus('این مرورگر پشتیبان‌گیری در پوشه را پشتیبانی نمی‌کند. از «دانلود فایل پشتیبان» استفاده کن.', true);
+                return;
+            }
+            try {
+                const handle = await window.showDirectoryPicker({ id: 'salnameh-backup', mode: 'readwrite', startIn: 'documents' });
+                backupDirHandle = handle;
+                await backupStore.setSetting('backupDir', handle);
+                backupFolderState = 'ready';
+                updateBackupUI();
+                const ok = await writeFolderBackup(true);
+                setBackupStatus(ok ? '✓ پوشه انتخاب شد و اولین پشتیبان نوشته شد.' : 'پوشه انتخاب شد.', false);
+            } catch (err) {
+                // Cancelling the picker is a normal action, not an error to shout about.
+                if (err && err.name === 'AbortError') return;
+                console.error('Choosing the backup folder failed:', err);
+                setBackupStatus('انتخاب پوشه انجام نشد.', true);
+            }
+        }
+
+        async function requestBackupFolderPermission() {
+            if (!backupDirHandle) return;
+            try {
+                const perm = await backupDirHandle.requestPermission({ mode: 'readwrite' });
+                backupFolderState = perm === 'granted' ? 'ready' : 'needs-permission';
+                updateBackupUI();
+                if (perm === 'granted') await writeFolderBackup(true);
+            } catch (err) {
+                console.error('Backup folder permission failed:', err);
+                backupFolderState = 'error';
+                updateBackupUI();
+            }
+        }
+
+        function setBackupStatus(text, isError) {
+            const el = document.getElementById('backup-status-msg');
+            if (!el) return;
+            el.textContent = text;
+            el.className = 'mt-2 text-[11px] font-medium ' + (isError ? 'text-red-600' : 'text-emerald-600');
+        }
+
+        function formatBackupTime(ms) {
+            if (!ms) return '';
+            try {
+                return new Date(ms).toLocaleString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } catch (_) {
+                return new Date(ms).toLocaleString();
+            }
+        }
+
+        async function updateBackupUI() {
+            const badge = document.getElementById('backup-folder-status');
+            const pick = document.getElementById('btn-backup-folder');
+            const now = document.getElementById('btn-backup-now');
+            const grant = document.getElementById('btn-backup-grant');
+            if (!badge) return;
+            const last = await backupStore.getSetting('lastFolderBackupAt');
+            if (backupFolderState === 'ready') {
+                badge.textContent = '✓ فعال — ' + (backupDirHandle ? backupDirHandle.name : '');
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold';
+                if (pick) pick.textContent = 'تغییر پوشه پشتیبان';
+                if (now) now.classList.remove('hidden');
+                if (grant) grant.classList.add('hidden');
+                if (last) setBackupStatus('آخرین پشتیبانگیری خودکار: ' + formatBackupTime(last), false);
+            } else if (backupFolderState === 'needs-permission') {
+                badge.textContent = '◷ یک‌بار اجازه لازم است';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold';
+                if (grant) grant.classList.remove('hidden');
+                if (now) now.classList.add('hidden');
+            } else if (backupFolderState === 'error') {
+                badge.textContent = 'پشتیبان‌گیری در پوشه ناموفق بود';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold';
+                if (pick) pick.textContent = 'انتخاب دوباره پوشه';
+            } else {
+                badge.textContent = 'پوشه‌ای انتخاب نشده';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold';
+                if (pick) pick.textContent = 'انتخاب پوشه پشتیبان';
+                if (now) now.classList.add('hidden');
+                if (grant) grant.classList.add('hidden');
+            }
+        }
+
+        async function renderSnapshotList() {
+            const list = document.getElementById('snapshot-list');
+            if (!list) return;
+            let snaps = [];
+            try {
+                snaps = await backupStore.allSnapshots();
+            } catch (_) {
+                snaps = [];
+            }
+            snaps.sort((a, b) => (b.at || 0) - (a.at || 0));
+            if (snaps.length === 0) {
+                list.innerHTML = '<div class="text-[11px] text-slate-400 py-2">هنوز نسخه بازیابی ساخته نشده است.</div>';
+                return;
+            }
+            list.innerHTML = snaps.map(s => {
+                const sum = snapshotSummary(s);
+                return `<div class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5">
+                    <div class="min-w-0">
+                        <div class="text-[11px] font-semibold text-slate-700">${formatBackupTime(s.at)}</div>
+                        <div class="text-[10px] text-slate-400">${sum.pages} روز · ${sum.strokes} قلم${s.label ? ' · ' + s.label : ''}</div>
+                    </div>
+                    <button data-restore-snapshot="${s.id}" class="shrink-0 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition">بازگردانی</button>
+                </div>`;
+            }).join('');
+        }
+
+        /** Replaces the planner with one of the automatic copies. The current state is saved first. */
+        async function restoreSnapshot(id) {
+            try {
+                const snaps = await backupStore.allSnapshots();
+                const snap = snaps.find(s => s.id === id);
+                if (!snap) return;
+                // Never lose what is on screen right now, even if it is the thing being replaced.
+                await flushPendingSave();
+                await takeSnapshot('پیش از بازگردانی', true);
+                await dbEngine.importAllPages(snap.pages);
+                await loadGeminiKeyFromDB();
+                await loadDayPage(AppState.currentDateKey);
+                renderSnapshotList();
+                setBackupStatus('✓ سالنامه به نسخه ' + formatBackupTime(snap.at) + ' بازگردانده شد.', false);
+            } catch (err) {
+                console.error('Snapshot restore failed:', err);
+                setBackupStatus('بازگردانی انجام نشد.', true);
+            }
+        }
+
+        document.getElementById('btn-backup-folder').addEventListener('click', () => { chooseBackupFolder(); });
+        document.getElementById('btn-backup-grant').addEventListener('click', () => { requestBackupFolderPermission(); });
+        document.getElementById('btn-backup-now').addEventListener('click', async () => {
+            const ok = await writeFolderBackup(true);
+            setBackupStatus(ok ? '✓ پشتیبان گرفته شد.' : 'پشتیبان‌گیری انجام نشد (اجازه یا پوشه را بررسی کن).', !ok);
+        });
+        document.getElementById('btn-backup-snapshot').addEventListener('click', async () => {
+            const id = await takeSnapshot('دستی', true);
+            setBackupStatus(id ? '✓ یک نسخه بازیابی ساخته شد.' : 'نسخه‌ای ساخته نشد.', !id);
+        });
+        document.getElementById('snapshot-list').addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-restore-snapshot]');
+            if (!btn) return;
+            const id = btn.getAttribute('data-restore-snapshot');
+            if (confirm('سالنامه به این نسخه بازیگردانی شود؟ وضعیت فعلی هم به‌عنوان یک نسخه ذخیره می‌شود.')) {
+                restoreSnapshot(id);
+            }
+        });
+
+        /**
+         * Leaving the app — switching tabs, locking the tablet, closing it — is the moment a
+         * debounced write could still be in flight. It is also the only moment iOS/Android are
+         * guaranteed to give us: `pagehide` is too late to await anything, so the work is done
+         * when the page goes HIDDEN, which happens on every app switch, and
+         * `pagehide` is kept as a last-resort flush for a desktop tab that is closed.
+         */
+        function handleLeavingApp() {
+            flushPendingSave();
+            // Forced: the regular throttle exists to avoid writing the whole planner on every
+            // stroke, not to skip the copy that happens when the user walks away.
+            if (backupFolderState === 'ready') writeFolderBackup(true);
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') handleLeavingApp();
+        });
+        window.addEventListener('pagehide', () => { flushPendingSave(); });
 
         // High-Quality Full Page PNG Export
         document.getElementById('btn-export').addEventListener('click', () => {
@@ -6807,6 +7292,10 @@
                 await loadGeminiKeyFromDB();
                 resizeCanvases();
                 await loadDayPage(AppState.currentDateKey);
+                // After the first page is on screen, so the recovery panel is ready when the user
+                // opens it, and the saved backup folder can start mirroring immediately.
+                renderSnapshotList();
+                loadBackupFolder();
             } catch (err) {
                 // IndexedDB can be blocked (private mode, storage pressure, a corrupt database).
                 // Without this the page stayed blank with nothing but a console error.

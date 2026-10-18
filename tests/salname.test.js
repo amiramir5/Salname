@@ -638,6 +638,82 @@ ok('categoryLabel is no longer a required schema field',
 ok('the tree schema demands fidelity to the handwriting',
     html.includes('هیچ مطلب تازه‌ای اضافه نکن'));
 
+/* ------------------------------------------------------------------ *
+ * 10. Data-loss protection: snapshots + a backup file on the device
+ * ------------------------------------------------------------------ */
+console.log('\n--- 10. backup and recovery ---');
+
+// The user's fear: «من می‌ترسم یهو سیستمم خراب شه». Rolling a page back is only possible if
+// copies of the whole planner are kept, and a broken DEVICE is only survivable if the copy
+// leaves the browser — which is what the folder backup does, with no network involved.
+
+// hashText is what tells the snapshotter whether anything changed since the last copy.
+const hashText = new Function(extractFn(html, 'hashText') + '; return hashText;')();
+ok('the same planner state always hashes the same', hashText('[{"a":1}]') === hashText('[{"a":1}]'));
+ok('a changed planner state hashes differently', hashText('[{"a":1}]') !== hashText('[{"a":2}]'));
+ok('the hash is never empty', hashText('').length > 0 && hashText('x').length > 0);
+
+// An automatic background file is no place for the user's API key.
+const backupSafePages = new Function(
+    "const GEMINI_SETTINGS_KEY = '__GEMINI_API_CONFIG__';\n" +
+    extractFn(html, 'backupSafePages') + '; return backupSafePages;')();
+check('the API key never lands in an automatic backup',
+    backupSafePages([
+        { dateKey: '1405-07-01', strokes: [] },
+        { dateKey: '__GEMINI_API_CONFIG__', apiKey: 'A_SECRET' }
+    ]).length, 1);
+check('a page without a key is not copied either', backupSafePages([{ strokes: [] }]).length, 0);
+
+// The backup database must be SEPARATE from the planner database. Bumping the version of a
+// database that another tab still holds open BLOCKS the upgrade, which would freeze startup for
+// a user who simply has the app open twice — so the recovery copies get their own database.
+ok('the backup store is a separate database', html.includes("this.dbName = 'Salnameh_BackupDB'"));
+ok('the planner database is still opened at its original version',
+    /indexedDB\.open\(this\.dbName, 1\)/.test(html));
+ok('...and the planner database is not the one holding the snapshots',
+    !/dbName = 'JalaliSmartPlannerDB_1405_1406'[\s\S]{0,400}snapshotStore/.test(html));
+
+ok('an automatic snapshot is only taken after a write that really succeeded',
+    /await dbEngine\.savePage\(buildPagePayload\(dateKey\)\);\s*\n\s*setSaveIndicator\('saved'\);\s*\n[\s\S]{0,320}maybeAutoSnapshot\(/.test(html));
+ok('the automatic snapshot is rate-limited', /SNAPSHOT_MIN_GAP_MS/.test(html));
+ok('identical copies are not stored twice',
+    html.includes('if (all.some(s => s.hash === hash))') || html.includes('s.hash === hash'));
+ok('old copies are dropped so storage cannot grow without end',
+    html.includes('MAX_SNAPSHOTS') && /all\.slice\(MAX_SNAPSHOTS\)/.test(html));
+
+ok('a restore keeps the current state as a copy first',
+    /takeSnapshot\('پیش از بازگردانی', true\)/.test(html));
+ok('loading a backup file keeps the current state as a copy first',
+    /takeSnapshot\('پیش از بارگذاری فایل', true\)/.test(html));
+
+// A file in a folder the user picks is the only copy that survives the device dying, and it
+// needs no network at all — which is why it, and not a cloud service, is the second layer.
+ok('the folder backup writes a plain JSON file with no network',
+    html.includes('showDirectoryPicker') && html.includes('createWritable') &&
+    !/backup[A-Za-z]*\([\s\S]{0,200}fetch\(/.test(html));
+ok('the chosen folder survives a reload',
+    html.includes("setSetting('backupDir', handle)") && html.includes("getSetting('backupDir')"));
+ok('write permission is re-checked instead of assumed',
+    html.includes('queryPermission') && html.includes('requestPermission'));
+ok('a revoked permission is surfaced and not swallowed',
+    html.includes("backupFolderState = 'needs-permission'"));
+ok('the rolling file and a dated file are both written',
+    html.includes("'Salnameh_Latest.json'") && html.includes('Salnameh_${AppState.currentDateKey}.json'));
+
+// Leaving the app is the one moment a debounced write can still be in flight.
+ok('leaving the app flushes the pending write',
+    /visibilitychange[\s\S]{0,200}handleLeavingApp\(\)/.test(html) &&
+    html.includes("window.addEventListener('pagehide'"));
+ok('leaving the app also refreshes the folder backup when it can',
+    /function handleLeavingApp\(\)[\s\S]{0,300}writeFolderBackup\(true\)/.test(html));
+
+ok('the recovery panel is reachable from the sync modal',
+    html.includes('id="snapshot-list"') && html.includes('id="btn-backup-folder"') &&
+    html.includes('id="btn-backup-snapshot"') && html.includes('id="backup-folder-status"'));
+ok('the user is told the truth about cloud services',
+    html.includes('Supabase') && html.includes('وقتی اینترنت قطع'));
+
+
 /* ------------------------------------------------------------------ */
 console.log('\n' + pass + ' passed, ' + failures.length + ' failed');
 if (failures.length) {
