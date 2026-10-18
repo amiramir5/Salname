@@ -5153,7 +5153,14 @@
             // stroke, so it can never be mistaken for a dot, and a big hand-drawn dot is still
             // a dot even when the letters around it are not much taller, which is exactly the
             // case a pure size threshold gets wrong.
-            const dotLimit = tallH;
+            //
+            // The 14px floor matters: on small or flat writing (a line ruled straight, a page
+            // that is mostly dots, fast tiny handwriting) the percentile above sank BELOW the
+            // dots themselves, so they stopped being recognised, each opened its own block, and
+            // a dot became a card of its own — the "the black dot and the line became separate
+            // categories" report. A stroke confined to a 14x14 box is a dot in any handwriting
+            // this app runs on.
+            const dotLimit = Math.max(14, tallH);
             const isDotLike = b => b.w <= dotLimit && b.h <= dotLimit;
             // A dot-like stroke may never open an item of its own (see step 3), and a block made of
             // nothing but marks is folded into a real block (step 4). `isMark` is the stricter of
@@ -5180,7 +5187,9 @@
             // 2. Every floating stroke is pulled into the line it is vertically closest to, which
             //    is what keeps the dots of a word inside that word's card. A stroke too far away
             //    to be a dot of that line (a stray mark, a separate short note) keeps its own line.
-            const attachDist = tallH * 1.6;
+            //    Persian dots sit ABOVE the letter body, so the reach has to cover a whole line
+            //    height — a bare tallH*1.6 left the dots of a word orphaned on small writing.
+            const attachDist = Math.max(26, tallH * 1.8);
             floating.forEach(b => {
                 let best = lines[0], bestD = Infinity;
                 lines.forEach(L => {
@@ -5280,11 +5289,25 @@
             const lineBlocks = blocks.filter(b => !isMark(b));
             const marks = blocks.filter(isMark);
 
+            // The right edges are quantised into INDENTATION LEVELS first. Real handwriting never
+            // indents by the same number of pixels twice in a row, so comparing each block only
+            // with the block above it made a pair of lines siblings one moment and parent/child
+            // the next. Levels make an irregular hand-drawn outline read the way it was drawn.
+            const levels = [];
+            lineBlocks.slice().sort((a, b) => b.x1 - a.x1).forEach(b => {
+                if (levels.length === 0 || (levels[levels.length - 1] - b.x1) > INDENT_TOL) {
+                    levels.push(b.x1);
+                }
+                b.indent = levels.length - 1;
+            });
+
+            // Classic outline nesting: a block's parent is the closest block above it at a
+            // SHALLOWER indent level.
             const stack = [];
             lineBlocks.forEach(block => {
-                while (stack.length && stack[stack.length - 1].x1 < block.x1 + INDENT_TOL) stack.pop();
+                while (stack.length && stack[stack.length - 1].indent >= (block.indent || 0)) stack.pop();
                 block.parentId = stack.length ? stack[stack.length - 1].id : null;
-                stack.push(block);
+                stack.push({ indent: block.indent || 0, id: block.id });
             });
 
             // Each mark joins the line it sits closest to instead of standing on its own.
@@ -5446,6 +5469,30 @@
             assignHandwritingParents(usable);
 
             const baseColorIdx = AppState.mindmapData.nodes.filter(n => !n.parentId).length;
+
+            // One colour per BRANCH, not one per card. Giving every card the next colour in the
+            // list painted the tree like a rainbow, which reads as arbitrary — in a mind map a
+            // colour means a topic. The whole subtree under a root now shares the root's colour,
+            // and the connector uses the child's colour, so each branch is one line of colour.
+            const branchRoot = new Map();
+            let nextRootIdx = 0;
+            usable.forEach(b => {
+                if (!b.parentId) branchRoot.set(b.id, baseColorIdx + nextRootIdx++);
+            });
+            // A mark joins the line nearest to it, which can sit LOWER on the page than the mark
+            // itself, so a child is not always after its parent in reading order. A few passes
+            // are enough for any real outline.
+            for (let pass = 0; pass < 4; pass++) {
+                let changed = false;
+                usable.forEach(b => {
+                    if (b.parentId && !branchRoot.has(b.id) && branchRoot.has(b.parentId)) {
+                        branchRoot.set(b.id, branchRoot.get(b.parentId));
+                        changed = true;
+                    }
+                });
+                if (!changed) break;
+            }
+
             usable.forEach((block, i) => {
                 // Size the card from the ink itself: the ink canvas is `w - 24` wide, so
                 // `inkW + 24` renders the handwriting at ~1:1 instead of shrinking it to 0.7x.
@@ -5469,7 +5516,7 @@
                     y: 0,
                     w: w,
                     h: estH + 42,
-                    color: MINDMAP_COLORS[(baseColorIdx + i) % MINDMAP_COLORS.length],
+                    color: MINDMAP_COLORS[(branchRoot.has(block.id) ? branchRoot.get(block.id) : baseColorIdx + i) % MINDMAP_COLORS.length],
                     collapsed: false
                 });
             });
@@ -6303,9 +6350,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 12,
-            date: '2026-10-17',
-            features: 'low-latency ink + no cursor trail + dot grouping'
+            version: 13,
+            date: '2026-10-18',
+            features: 'smarter tree: indent levels, branch colours, dots never split'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');

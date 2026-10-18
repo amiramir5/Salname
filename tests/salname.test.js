@@ -454,6 +454,65 @@ check('a short but full-height number is never a mark', isTinyMark(40, 30, 30), 
 check('a lone letter keeps its own item', isTinyMark(22, 27, 30), false);
 check('an empty box cannot crash the test', isTinyMark(0, 0, 0), true);
 
+// Small, FLAT writing (fast tiny handwriting, a line ruled straight) made the height reference
+// the grouping uses to recognise a dot sink down to the height of the words themselves. Persian
+// dots sit a little above the letters, so they then measured BIGGER than that reference, stopped
+// being recognised as dots, and each opened a card of its own — the "the black dot and the line
+// became separate categories" report, coming back on a page of small writing. The dot size now
+// has an absolute floor: a stroke confined to a 14x14 box is a dot in any handwriting.
+let smallSid = 0;
+const smallWord = (x0, x1, y) => {
+    const points = [];
+    const n = Math.max(3, Math.round((x0 - x1) / 9));
+    for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        points.push({ x: x0 + (x1 - x0) * t, y: y + Math.sin(t * 9) * 3 });
+    }
+    return { id: 'sw' + (smallSid++), size: 3, points };
+};
+const smallLine = (xr, y, words, dots) => {
+    const out = [];
+    let x = xr;
+    for (let i = 0; i < words; i++) {
+        const len = 60 + (i % 3) * 22;
+        out.push(smallWord(x, x - len, y));
+        x -= len + (i % 2 ? 16 : 26);       // ordinary word gaps
+    }
+    dots.forEach(d => out.push(hwDotR('sd' + (smallSid++), d[0], d[1], 3)));
+    return out;
+};
+const smallWriting = [].concat(
+    smallLine(1150, 120, 4, [[1000, 105], [900, 105]]),
+    smallLine(1000, 215, 3, []),
+    smallLine(990, 300, 4, [[700, 288]]),
+    smallLine(840, 385, 2, [])
+);
+const smallBlocks = groupStrokesIntoBlocks(smallWriting);
+check('small flat writing still yields one card per written line', smallBlocks.length, 4);
+check('...with both dots of the first line inside its card', smallBlocks[0].strokes.length, 6);
+check('...and the side dot of the third line inside its card', smallBlocks[2].strokes.length, 5);
+check('...and no card that is nothing but a dot', smallBlocks.every(b => b.strokes.length > 1), true);
+ok('the dot-size reference has an absolute floor',
+    /const dotLimit = Math\.max\(14, tallH\)/.test(html));
+ok('a floating dot can reach the line it belongs to',
+    /const attachDist = Math\.max\(26, tallH \* 1\.8\)/.test(html));
+
+// Real handwriting never indents by the same number of pixels twice in a row. Comparing each
+// block only with the block above it made a pair of lines siblings one moment and parent/child
+// the next, which is what "the tree is still not great" looked like. Right edges are quantised
+// into indentation levels first, so an uneven outline reads the way it was drawn.
+const uneven = assignHandwritingParents([hwBlock(400), hwBlock(363), hwBlock(357), hwBlock(330)]);
+check('an unevenly indented block is still a child of the root', uneven[1].parentId, uneven[0].id);
+check('...and its nearly-identical sibling is its sibling', uneven[2].parentId, uneven[0].id);
+check('...while a deeper indent nests under the line above it', uneven[3].parentId, uneven[2].id);
+
+// A colour means a topic. Giving every card the next colour in the list painted the tree like a
+// rainbow, which read as arbitrary, and the connector (which uses the child's colour) changed
+// colour halfway down a branch.
+ok('the card colour is chosen per branch, not per card',
+    html.includes('const branchRoot = new Map()') &&
+    html.includes('branchRoot.set(b.id, branchRoot.get(b.parentId))'));
+
 // A dot drawn well to the RIGHT of its word (a bullet at the start of an RTL line). The wide gap
 // used to open a card of its own, and — being the right-most block on an RTL page — the dot then
 // became the ROOT of the tree with the real line hanging underneath it.
