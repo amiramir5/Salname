@@ -353,6 +353,58 @@ check('all three pointer sample loops use the helper',
     (html.match(/const events = coalescedEventsOf\(e\);/g) || []).length, 3);
 
 /* ------------------------------------------------------------------ *
+ * 7b. Wiping the live layer must not touch the whole page
+ * ------------------------------------------------------------------ *
+ * `clearLayer(ctxInteraction)` runs at the start AND the end of every stroke. It used to
+ * `clearRect` the entire page-sized bitmap (2900x3900 at DPR 2) each time, which marks the
+ * whole texture dirty even though only the last letter changed — the prime suspect for the
+ * hitch a stylus feels on pen-down / pen-up. It now clears only the box that was painted.
+ */
+ok('the live layer is wiped by rectangle when the box is known',
+    html.includes('function clearInteractionLayer()') &&
+    /clearInteractionLayer\(\)[\s\S]{0,900}clearRect\(b\.x0 - 1/.test(html));
+ok('an empty live layer is not cleared at all',
+    /function clearInteractionLayer\(\) \{\s*\n\s*if \(!liveInkPainted && !liveInkUntracked\) return;/.test(html));
+ok('anything unmeasured falls back to the full-page clear',
+    /if \(liveInkUntracked \|\| !liveInkBox\) \{\s*\n\s*ctxInteraction\.clearRect\(0, 0, w, h\);/.test(html));
+ok('clearLayer delegates the interaction layer to the bounded wipe',
+    /function clearLayer\(ctx\) \{\s*\n\s*if \(ctx === ctxInteraction\)[\s\S]{0,200}clearInteractionLayer\(\);/.test(html));
+
+// Every paint on the live layer has to register its own box, or the wipe leaves ghosts behind.
+['drawIncrementalSegments', 'drawPredictedTail', 'drawPenCursorPreview', 'drawEraserCursorPreview']
+    .forEach(fn => ok('the ' + fn.replace(/([A-Z])/g, ' $1').toLowerCase() + ' paint is measured',
+        new RegExp('function ' + fn + '[\\s\\S]{0,2200}trackLiveInk\\(').test(html)));
+ok('shape / lasso / selection paint is flagged as unmeasured',
+    /function renderInteractionOverlay[\s\S]{0,1100}liveInkUntracked = true;/.test(html) &&
+    (html.match(/liveInkUntracked = true;/g) || []).length >= 3);
+ok('a full repaint forgets what the live layer held',
+    /function renderAllLayers[\s\S]{0,900}resetLiveInkTracking\(\);/.test(html) &&
+    /function resizeCanvases[\s\S]{0,2800}resetLiveInkTracking\(\);/.test(html));
+ok('the tracked batch does not scale with the length of the stroke',
+    /function drawIncrementalSegments[\s\S]{0,600}const first = Math\.max\(0, fromIdx - 2\);/.test(html));
+ok('the wipe follows the last batch, not the document',
+    /liveInkBox = unionBox\(liveInkBox, box\)/.test(html) &&
+    html.includes('let liveInkUntracked = false;'));
+
+// The pen is the tool this app is written with, and it has to run on a fully opaque layer: a
+// faded canvas is a compositor state change that Chromium's low-latency ink path dislikes.
+// Only the highlighter preview is allowed to fade the element.
+ok('the pen preview never fades the live layer',
+    /canvasInteraction\.style\.opacity = AppState\.activeTool === 'highlighter' \? '0\.38' : '1';/.test(html) &&
+    html.includes("canvasInteraction.style.opacity = '1';"));
+
+// `desynchronized: true` is a hint. If the browser refuses it, the ink is composited the
+// ordinary way — and only the device can report which one it got.
+ok('the meter asks the browser what it really granted',
+    html.includes('function penContextInfo()') &&
+    html.includes('getContextAttributes()') &&
+    html.includes('attrs.desynchronized'));
+ok('...and puts it in the copyable report',
+    /function penMeterReport\(\)[\s\S]{0,1400}routeText/.test(html));
+ok('a refused low-latency path is called out in the card',
+    /ctxInfo\.desynchronized === false/.test(html));
+
+/* ------------------------------------------------------------------ *
  * 8. Handwriting → tree (no AI) and the "never invent content" rules
  * ------------------------------------------------------------------ */
 console.log('\n--- 8. handwriting tree + no invented content ---');

@@ -56,8 +56,9 @@ change), set back to `''` at exactly 100%.
    - `drawPredictedTail(e)` — up to 3 `getPredictedEvents()` points, max 60 paper px ahead,
      drawn into a small box that is cleared on the next real sample and never committed.
 4. `pointerup` → `pushUndoState()` (deep clone, see below) → `InkBeautifier.beautify()`
-   (simplify + smooth) → render **just the one new stroke** onto `#canvas-ink` → clear the
-   interaction layer → debounced save (180 ms). **No full-page repaint on pen-up.**
+   (simplify + smooth) → render **just the one new stroke** onto `#canvas-ink` → wipe **only the
+   box the live layer actually painted** (not the whole page — see below) → debounced save (180 ms).
+   **No full-page repaint on pen-up.**
 
 Eraser: repaints only the changed rectangle, coalesced to one repaint per animation frame, with a
 full repaint on `pointerup` as the authoritative pass (verified pixel-identical or
@@ -77,6 +78,8 @@ anti-aliasing-only vs a full repaint).
 | PDF layer retired while unused | removes one 45 MB texture at dpr 2 |
 | Eraser: region repaint + one repaint per frame | 50 erase samples ≈ 0.4 ms of JS; region vs full repaint = 0 differing pixels (pen/partial), ≤27/255 on stroke fringes elsewhere |
 | Minimal pen cursor (hairline ring, clears only its own trail) | already in place |
+| Interaction layer wiped **by rectangle**, not by page | at pen-down and pen-up the clear is now the union of what was painted (a 120×75 paper-px box for a normal letter) instead of 1450×1950; measured residue on the live layer after a stroke = 0 pixels |
+| `getContextAttributes()` readout in the meter | Chromium 152 (desktop harness) reports `desynchronized: true`, `alpha: true`; now also in the copyable report |
 
 A Chromium trace of the desktop harness shows: **0 dropped frames, ≈0.011 ms JS per sample,
 Commit ≤ 0.2 ms, Paint/RasterTask ≈ 0**. A full repaint of a 9-element page ≈ 0.8 ms. So the
@@ -94,8 +97,9 @@ p50/p90/p99, frame rate, dropped frames (counted only while the pen is on the pa
   thrashing. Prediction: «روانتر» improves things dramatically and «فریم افتاده» is high.
 - **H2 — the desynchronized canvas is not actually taking the low-latency path** on this device.
   Candidate causes: it lives inside an `overflow:auto` scroller; it is larger than the viewport
-  (overlay-plane size limits); its CSS `opacity` is changed at runtime (the highlighter path sets
-  `canvasInteraction.style.opacity = '0.38'`).
+  (overlay-plane size limits); its CSS `opacity` is changed at runtime (only the highlighter
+  preview does that now — the pen keeps the element fully opaque). The meter now reports what
+  `getContextAttributes()` returns, so this is answerable from the device itself.
 - **H3 — tile rasterisation cost.** A 2900×3900 layer is many tiles; each sample dirties tiles
   whose raster cost on the tablet may dominate.
 - **H4 — the scrolling container** forces an extra composited scrolling layer and may prevent the

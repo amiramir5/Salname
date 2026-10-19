@@ -2325,6 +2325,17 @@
         // Box (paper units) of the drawn pen prediction, so it can be wiped on the next real
         // sample instead of accumulating. See drawPredictedTail.
         let predictionBox = null;
+        // Everything currently painted on the interaction layer, in PAPER units. Wiping that
+        // layer used to mean a `clearRect` of the whole page-sized bitmap — twice per stroke
+        // (pen down and pen up), i.e. once per letter of Persian handwriting. With this box the
+        // wipe only touches the rectangle that actually has ink on it.
+        let liveInkBox = null;
+        // Did anything land on the layer since the last wipe? Then the wipe can be skipped
+        // entirely, which is the common case at pen-down (the hover dot is all that is there).
+        let liveInkPainted = false;
+        // Set when something we cannot measure drew on the layer (shape previews, the lasso,
+        // the selection handles). The next wipe then falls back to the safe full-page clear.
+        let liveInkUntracked = false;
 
         // Eraser size, in CSS pixels. One constant drives BOTH the erase hit-test and the
         // on-screen ring, so the circle you see is exactly the area that gets erased.
@@ -2375,10 +2386,51 @@
             ctxInteraction.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctxInteraction.lineCap = 'round';
             ctxInteraction.lineJoin = 'round';
+            // A new backing store starts out blank.
+            resetLiveInkTracking();
 
             // renderPdfBackground() sizes (or retires) the PDF layer itself.
             renderPdfBackground();
             renderAllLayers();
+        }
+
+        /** Records that `box` (paper units) now has paint on the interaction layer. */
+        function trackLiveInk(box) {
+            if (box) liveInkBox = unionBox(liveInkBox, box);
+            liveInkPainted = true;
+        }
+
+        /** Forgets what is on the interaction layer, e.g. after it was wiped as a whole. */
+        function resetLiveInkTracking() {
+            liveInkBox = null;
+            liveInkPainted = false;
+            liveInkUntracked = false;
+        }
+
+        /**
+         * Wipes the interaction layer, touching only what was actually painted on it.
+         *
+         * This is the app's hottest clear: it runs at the start AND the end of every stroke, and
+         * Persian handwriting lifts the pen once per letter. It used to `clearRect` the WHOLE
+         * page-sized bitmap every time, which marks the entire texture dirty even though only the
+         * last letter's box had changed — a prime suspect for the hitch felt as the nib touches
+         * down and comes back up. The tracked box makes the same wipe cost a few hundred pixels
+         * instead of 45 MB.
+         *
+         * Falls back to the full-page clear for anything that paints without being measured.
+         */
+        function clearInteractionLayer() {
+            if (!liveInkPainted && !liveInkUntracked) return;
+            const w = paperStage.clientWidth || 1450;
+            const h = paperStage.clientHeight || 1950;
+            if (liveInkUntracked || !liveInkBox) {
+                ctxInteraction.clearRect(0, 0, w, h);
+            } else {
+                // One paper pixel of slack, so the antialiased edge of the last patch goes too.
+                const b = liveInkBox;
+                ctxInteraction.clearRect(b.x0 - 1, b.y0 - 1, (b.x1 - b.x0) + 2, (b.y1 - b.y0) + 2);
+            }
+            resetLiveInkTracking();
         }
 
         /**
@@ -2391,7 +2443,13 @@
          * page, and why the eraser ring seemed to "stick" to the pen without anything happening.
          */
         function clearLayer(ctx) {
-            if (ctx === ctxInteraction) { penCursorAt = null; eraserRingAt = null; predictionBox = null; }
+            if (ctx === ctxInteraction) {
+                penCursorAt = null;
+                eraserRingAt = null;
+                predictionBox = null;
+                clearInteractionLayer();
+                return;
+            }
             ctx.clearRect(0, 0, paperStage.clientWidth || 1450, paperStage.clientHeight || 1950);
         }
 
@@ -2905,6 +2963,7 @@
             penCursorAt = null;
             eraserRingAt = null;
             predictionBox = null;
+            resetLiveInkTracking();
 
             // 1. In Planner Mode, draw right schedule margin; in Mind-Map mode, draw smooth Bezier tree connectors
             if (AppState.workspaceMode === 'planner') {
@@ -3983,6 +4042,30 @@
             if (pts.length === 0) return;
 
             const strokeW = ctxInteraction.lineWidth;
+
+            // What this batch can put on the layer — tracked so pen-up only has to wipe this
+            // rectangle. Only the samples that are actually redrawn take part (the last couple
+            // are overdrawn on every batch), otherwise the per-sample cost would climb with the
+            // length of the stroke.
+            const first = Math.max(0, fromIdx - 2);
+            let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+            const include = (p) => {
+                if (p.x < bx0) bx0 = p.x;
+                if (p.y < by0) by0 = p.y;
+                if (p.x > bx1) bx1 = p.x;
+                if (p.y > by1) by1 = p.y;
+            };
+            for (let i = first; i < pts.length; i++) include(pts[i]);
+            if (predictedPt) include(predictedPt);
+            const inkPad = Math.max(4, strokeW * 0.5 + 6);
+            trackLiveInk({ x0: bx0 - inkPad, y0: by0 - inkPad, x1: bx1 + inkPad, y1: by1 + inkPad });
+
+            // A translucent preview (the highlighter) is painted at 38% alpha, so the couple of
+            // segments that are redrawn on every batch would build up into a dark blob under the
+            // nib; the fade therefore stays on the canvas ELEMENT for the highlighter (see
+            // renderInteractionOverlay) and the pen — the tool this app is written with — never
+            // touches that property at all.
+
             ctxInteraction.beginPath();
 
             if (pts.length <= 2) {
@@ -4002,7 +4085,6 @@
             // samples — so what you write is what you keep. The last couple of segments are
             // redrawn on each batch and simply overdraw themselves, which is invisible with the
             // solid pen colours.
-            const first = Math.max(0, fromIdx - 2);
             if (first === 0) {
                 ctxInteraction.moveTo(pts[0].x, pts[0].y);
             } else {
@@ -4083,6 +4165,7 @@
             });
             const pad = (ctxInteraction.lineWidth || 3) + 8;
             predictionBox = { x: x0 - pad, y: y0 - pad, w: (x1 - x0) + pad * 2, h: (y1 - y0) + pad * 2 };
+            trackLiveInk({ x0: predictionBox.x, y0: predictionBox.y, x1: predictionBox.x + predictionBox.w, y1: predictionBox.y + predictionBox.h });
 
             ctxInteraction.save();
             ctxInteraction.beginPath();
@@ -4101,9 +4184,15 @@
             const h = paperStage.clientHeight;
             ctxInteraction.clearRect(0, 0, w, h);
             canvasInteraction.style.opacity = '1';
+            // Shapes, the lasso and the selection handles are drawn here without being measured
+            // into liveInkBox, so the next wipe has to clear the whole layer (as it used to).
+            // Only a branch that actually draws sets the flag, so a pen stroke right after an
+            // empty overlay render still gets the cheap rectangle wipe.
+            resetLiveInkTracking();
 
             // 1. If currently drawing a geometric shape or straight ruler line, render live preview
             if (AppState.isDrawing && (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') && AppState.currentRawPoints.length > 0) {
+                liveInkUntracked = true;
                 if (AppState.activeTool === 'highlighter') {
                     canvasInteraction.style.opacity = '0.38';
                 }
@@ -4139,6 +4228,7 @@
 
             // 2. If drawing Lasso polygon
             if (AppState.isDrawing && AppState.activeTool === 'lasso' && AppState.lassoPolygon.length > 1) {
+                liveInkUntracked = true;
                 ctxInteraction.save();
                 ctxInteraction.strokeStyle = '#2563EB';
                 ctxInteraction.lineWidth = 1.5;
@@ -4157,6 +4247,7 @@
 
             // 3. If Selection Bounds exist, draw Bounding Box + Scale & Rotate Handles
             if (AppState.selectionBounds) {
+                liveInkUntracked = true;
                 const b = AppState.selectionBounds;
                 ctxInteraction.save();
                 ctxInteraction.strokeStyle = '#2563EB';
@@ -4322,7 +4413,11 @@
             set('pen-meter-drop', toPersianDigits(penMeter.dropped));
             set('pen-meter-samples', `${toPersianDigits(penMeter.rawSamples)} / ${toPersianDigits(penMeter.moveSamples)}`);
             set('pen-meter-pred', predRatio === null ? '—' : `${toPersianDigits(predRatio)}٪`);
-            set('pen-meter-canvas', `${toPersianDigits(layers.bitmap)} · ${toPersianDigits(layers.count)} لایه · ${toPersianDigits(layers.mb)} مگابایت`);
+            const ctxInfo = penContextInfo();
+            const directRoute = ctxInfo.desynchronized === null
+                ? '—'
+                : (ctxInfo.desynchronized ? 'مسیر مستقیم' : 'ترکیب عادی');
+            set('pen-meter-canvas', `${toPersianDigits(layers.bitmap)} · ${toPersianDigits(layers.count)} لایه · ${toPersianDigits(layers.mb)} مگابایت · ${directRoute}`);
 
             const notes = [];
             if (penMeter.moveSamples > 8 && penMeter.rawSamples === 0) {
@@ -4333,6 +4428,9 @@
             }
             if (penMeter.dropped > 3) {
                 notes.push('فریم میافتد. «روانتر (سبکتر)» را بزن و دوباره بنویس؛ اگر افت قطع شد، همین را نگه دار.');
+            }
+            if (ctxInfo.desynchronized === false) {
+                notes.push('مرورگر مسیر کم‌تأخیر (desynchronized) را نداد؛ همین بوم زنده دارد عادی ترکیب می‌شود.');
             }
             const noteEl = document.getElementById('pen-meter-note');
             if (noteEl) {
@@ -4358,6 +4456,29 @@
             };
         }
 
+        /**
+         * What the browser ACTUALLY granted the live layer — not what the code asked for.
+         *
+         * `desynchronized: true` is only a hint. Chromium may ignore it, and when it does the ink
+         * takes the ordinary compositing path; that is exactly the difference between ink that
+         * comes out from under the nib and ink that trails behind it. No amount of JavaScript can
+         * see it without asking, so it goes in the report the tablet can hand back.
+         */
+        function penContextInfo() {
+            let attrs = null;
+            try {
+                attrs = ctxInteraction.getContextAttributes ? ctxInteraction.getContextAttributes() : null;
+            } catch (_) {}
+            return {
+                requested: true,
+                desynchronized: attrs && typeof attrs.desynchronized === 'boolean' ? attrs.desynchronized : null,
+                alpha: attrs && typeof attrs.alpha === 'boolean' ? attrs.alpha : null,
+                css: `${canvasInteraction.clientWidth}×${canvasInteraction.clientHeight}`,
+                bitmap: `${canvasInteraction.width}×${canvasInteraction.height}`,
+                ratio: window.devicePixelRatio || 1
+            };
+        }
+
         function penMeterReport() {
             const lat50 = penMeterPercentile(penMeter.lat, 0.5);
             const lat90 = penMeterPercentile(penMeter.lat, 0.9);
@@ -4366,13 +4487,19 @@
                 ? penMeter.frames.reduce((a, b) => a + b, 0) / penMeter.frames.length
                 : 0;
             const layers = meterLayerInfo();
+            const ctxInfo = penContextInfo();
+            const routeText = ctxInfo.desynchronized === null
+                ? 'نامعلوم (این مرورگر گزارشش نمی‌دهد)'
+                : (ctxInfo.desynchronized ? 'فعال — مسیر مستقیم' : 'غیرفعال — ترکیب عادی');
             const lines = [
                 'سنجش قلم — سالنامه',
                 `نسبت پیکسل دستگاه: ${toPersianDigits(window.devicePixelRatio)} · بوم: ${toPersianDigits(layers.bitmap)} · ${toPersianDigits(layers.count)} لایه · ${toPersianDigits(layers.mb)} مگابایت`,
+                `مسیر کم‌تأخیر: درخواست‌شده بله · مرورگر می‌گوید: ${routeText} · alpha: ${ctxInfo.alpha === null ? 'نامعلوم' : (ctxInfo.alpha ? 'دارد' : 'ندارد')}`,
+                `بوم زنده: ${toPersianDigits(ctxInfo.css)} روی صفحه · ${toPersianDigits(ctxInfo.bitmap)} پیکسل · نسبت واقعی ${toPersianDigits(ctxInfo.ratio)}`,
                 `کیفیت قلم: ${AppState.penQuality === 'smooth' ? 'روان‌تر (سبک‌تر)' : 'حداکثر'} · زوم: ${toPersianDigits(Math.round(AppState.zoomScale * 100))}٪`,
                 lat50 === null
                     ? 'تأخیر ورودی: قلمی ثبت نشد'
-                    : `تأخیر ورودی (ورودی تا رسم): میانه ${toPersianDigits(lat50.toFixed(1))} · ۹۰٪ ${toPersianDigits(lat90.toFixed(1))} · بدترین ${toPersianDigits(lat99.toFixed(1))} میلی‌ثانیه — ${toPersianDigits(penMeter.lat.length)} نمونه`,
+                    : `سن رویداد ورودی تا رسم (نه تا چشم): میانه ${toPersianDigits(lat50.toFixed(1))} · ۹۰٪ ${toPersianDigits(lat90.toFixed(1))} · بدترین ${toPersianDigits(lat99.toFixed(1))} میلی‌ثانیه — ${toPersianDigits(penMeter.lat.length)} نمونه`,
                 `نرخ فریم: ${avgFrame ? toPersianDigits(Math.round(1000 / avgFrame)) : '—'} · فریم افتاده هنگام نوشتن: ${toPersianDigits(penMeter.dropped)}`,
                 `نمونهٔ خام pointerrawupdate: ${toPersianDigits(penMeter.rawSamples)} · pointermove: ${toPersianDigits(penMeter.moveSamples)}`,
                 `پیش‌بینی قلم: ${penMeter.predChances > 4 ? toPersianDigits(Math.round(penMeter.predHits / penMeter.predChances * 100)) + '٪' : '—'}`,
@@ -4929,6 +5056,7 @@
             eraserRingAt = null;
             penCursorAt = { x: pt.x, y: pt.y };
             const s = 1 / (AppState.zoomScale || 1);
+            trackLiveInk({ x0: pt.x - 6 * s, y0: pt.y - 6 * s, x1: pt.x + 6 * s, y1: pt.y + 6 * s });
             ctxInteraction.save();
             ctxInteraction.lineWidth = 1.1 * s;
             ctxInteraction.strokeStyle = 'rgba(15, 23, 42, 0.5)';
@@ -4946,6 +5074,8 @@
             clearCursorTrail(eraserRingAt || penCursorAt, pt, ERASER_RADIUS + 22);
             penCursorAt = null;
             eraserRingAt = { x: pt.x, y: pt.y };
+            const ringR = ERASER_RADIUS + 2;
+            trackLiveInk({ x0: pt.x - ringR, y0: pt.y - ringR, x1: pt.x + ringR, y1: pt.y + ringR });
             ctxInteraction.save();
             ctxInteraction.beginPath();
             ctxInteraction.arc(pt.x, pt.y, ERASER_RADIUS, 0, Math.PI * 2);
@@ -7316,9 +7446,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 17,
-            date: '2026-10-19',
-            features: 'layers that are not needed are retired (PDF, highlighter)'
+            version: 18,
+            date: '2026-10-20',
+            features: 'the live layer is wiped by rectangle, not by page'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
