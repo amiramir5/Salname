@@ -893,6 +893,21 @@ ok('the PDF layer is retired when no PDF is loaded',
     html.includes('canvasPdf.width = 1;') && html.includes("canvasPdf.style.display = 'none';"));
 ok('...and is brought back, at the right size, when one is',
     /canvasPdf\.style\.display = '';[\s\S]{0,120}canvasPdf\.width = w \* dpr;/.test(html));
+// The highlighter is the second page-sized bitmap most pages never need. At dpr 2 it is ~45 MB
+// that the compositor would otherwise keep and blend on every frame.
+ok('the highlighter layer retires itself while nothing is highlighted',
+    html.includes('function ensureHighlighterLayer(needed, w, h)') &&
+    html.includes("canvasHighlighter.style.display = 'none';") &&
+    html.includes('canvasHighlighter.width = 1;'));
+ok('...decided by the strokes that actually exist',
+    /renderAllLayers\(\) \{[\s\S]{0,400}ensureHighlighterLayer\(AppState\.strokes\.some\(s => s\.tool === 'highlighter'\)/.test(html));
+ok('...and woken up BEFORE the first highlight is drawn onto it',
+    /newStroke\.tool === 'highlighter'[\s\S]{0,300}ensureHighlighterLayer\(true/.test(html));
+ok('a retired layer is never stretched across an export',
+    html.includes("if (canvasHighlighter.style.display !== 'none')") &&
+    html.includes("if (canvasPdf.style.display !== 'none')"));
+ok('resize no longer blindly sizes the highlighter back up',
+    !html.includes('[canvasHighlighter, canvasInk].forEach'));
 
 // The on-device meter: the user has the stylus, we do not, so the app has to be able to measure
 // itself instead of us guessing at the tablet's latency.

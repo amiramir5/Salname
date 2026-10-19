@@ -2362,13 +2362,11 @@
             const layoutH = paperStage.clientHeight || 1950;
             cachedCanvasRect = paperStage.getBoundingClientRect();
 
-            // High-DPI static canvases for crisp handwriting quality
-            [canvasHighlighter, canvasInk].forEach(c => {
-                c.width = layoutW * dpr;
-                c.height = layoutH * dpr;
-                const ctx = c.getContext('2d');
-                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            });
+            // High-DPI static canvas for crisp handwriting quality. The highlighter layer sizes
+            // (or retires) itself in ensureHighlighterLayer(), called from renderAllLayers().
+            canvasInk.width = layoutW * dpr;
+            canvasInk.height = layoutH * dpr;
+            ctxInk.setTransform(dpr, 0, 0, dpr, 0, 0);
 
             // Live interaction canvas — same mapping as the static layers, so what you see
             // while writing is pixel-for-pixel what gets committed on pen-up.
@@ -2864,9 +2862,40 @@
             ctx.restore();
         }
 
+        /**
+         * Sizes the highlighter layer, or retires it to 1x1 while nothing is highlighted.
+         *
+         * A page-sized bitmap costs ~45 MB at dpr 2, and the compositor keeps and blends it on
+         * every frame even when it is completely empty. Most pages never use the highlighter, so
+         * that texture is pure pressure on exactly the device that is dropping frames. Nothing is
+         * ever drawn on a retired layer: the commit path calls this before a highlight is drawn.
+         */
+        let highlighterSize = { w: 0, h: 0, dpr: 0 };
+        function ensureHighlighterLayer(needed, w, h) {
+            if (!needed) {
+                if (canvasHighlighter.style.display === 'none') return;
+                canvasHighlighter.style.display = 'none';
+                canvasHighlighter.width = 1;
+                canvasHighlighter.height = 1;
+                highlighterSize = { w: 0, h: 0, dpr: 0 };
+                return;
+            }
+            if (canvasHighlighter.style.display !== 'none' &&
+                highlighterSize.w === w && highlighterSize.h === h && highlighterSize.dpr === dpr) {
+                return;
+            }
+            canvasHighlighter.style.display = '';
+            canvasHighlighter.width = w * dpr;
+            canvasHighlighter.height = h * dpr;
+            ctxHighlighter.setTransform(dpr, 0, 0, dpr, 0, 0);
+            highlighterSize = { w: w, h: h, dpr: dpr };
+        }
+
         function renderAllLayers() {
             const w = paperStage.clientWidth;
             const h = paperStage.clientHeight;
+
+            ensureHighlighterLayer(AppState.strokes.some(s => s.tool === 'highlighter'), w, h);
 
             ctxHighlighter.clearRect(0, 0, w, h);
             ctxInk.clearRect(0, 0, w, h);
@@ -4814,6 +4843,11 @@
                     AppState.strokes.push(newStroke);
 
                     // Instant Zero-Freeze Commit directly onto target High-DPI layer without wiping whole 1850px page
+                    if (newStroke.tool === 'highlighter') {
+                        // The layer is retired to 1x1 while no highlight exists; bring it back
+                        // BEFORE drawing, or this first highlight would land on a 1x1 canvas.
+                        ensureHighlighterLayer(true, paperStage.clientWidth, paperStage.clientHeight);
+                    }
                     const targetCtx = newStroke.tool === 'highlighter' ? ctxHighlighter : ctxInk;
                     InkBeautifier.renderSmoothStroke(targetCtx, newStroke);
                 }
@@ -7282,9 +7316,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 16,
-            date: '2026-10-18',
-            features: 'pen meter, lighter eraser repaint, faster undo copy'
+            version: 17,
+            date: '2026-10-19',
+            features: 'layers that are not needed are retired (PDF, highlighter)'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -7989,12 +8023,15 @@
                 }
             }
 
-            // 2. Composite PDF, Highlighter, and Ink Canvases
-            exCtx.drawImage(canvasPdf, 0, 0, w, h);
-            exCtx.save();
-            exCtx.globalAlpha = 0.38;
-            exCtx.drawImage(canvasHighlighter, 0, 0, w, h);
-            exCtx.restore();
+            // 2. Composite PDF, Highlighter, and Ink Canvases. A retired layer is 1x1 and must not
+            // be stretched across the export (it is empty anyway).
+            if (canvasPdf.style.display !== 'none') exCtx.drawImage(canvasPdf, 0, 0, w, h);
+            if (canvasHighlighter.style.display !== 'none') {
+                exCtx.save();
+                exCtx.globalAlpha = 0.38;
+                exCtx.drawImage(canvasHighlighter, 0, 0, w, h);
+                exCtx.restore();
+            }
             exCtx.drawImage(canvasInk, 0, 0, w, h);
 
             // 3. If in Mind-Map mode, also draw the Mind-Map Node Cards onto exported image
