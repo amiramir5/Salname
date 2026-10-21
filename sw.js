@@ -13,7 +13,7 @@
  * IMPORTANT: because assets are cache-first, ALWAYS bump CACHE_VERSION below whenever
  * you change anything under assets/. Changing index.html alone needs no bump.
  */
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const CACHE = `salname-${CACHE_VERSION}`;
 const RUNTIME = `salname-runtime-${CACHE_VERSION}`;
 

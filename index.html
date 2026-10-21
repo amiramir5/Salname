@@ -192,8 +192,10 @@
         #paper-stage {
             position: relative;
             width: 1450px;
-            min-width: 100%;
             height: 1950px;
+            /* No percentage min-width: under CSS zoom it resolves against the unzoomed
+               viewport, widening the sheet without making it taller. That cramped the rules
+               and squeezed every stroke. The fit button computes the scale instead. */
             /* The paper is the one object the whole app is about, so it is the only thing that
                casts a real shadow: a sheet lying on the desk, not another rounded web card. */
             box-shadow: var(--sheet);
@@ -805,8 +807,8 @@
         <!-- Stroke Size & Beautifier Popover Trigger -->
         <button id="btn-stroke-settings" class="tool-btn p-1.5 rounded-xl text-slate-700 flex flex-col items-center gap-0.5 border border-slate-200 shrink-0" title="ضخامت قلم و صاف‌ساز خط">
             <span class="w-2.5 h-2.5 rounded-full bg-slate-800 inline-block"></span>
-            <span id="label-stroke-size" class="text-[10px] font-bold">۱.۲</span>
-            <span id="label-streamline" class="hidden">صاف‌ساز: ۰٪</span>
+            <span id="label-stroke-size" class="text-[10px] font-bold">۲.۵</span>
+            <span id="label-streamline" class="hidden">صاف‌ساز: ۱۰۰٪</span>
         </button>
     </aside>
 
@@ -967,8 +969,11 @@
         <div class="fixed bottom-16 md:bottom-4 right-3 z-30 flex flex-col items-center gap-1 bg-white/95 border border-slate-200 shadow-lg rounded-2xl p-1.5">
             <div class="flex items-center gap-0.5 border-b border-slate-100 pb-1">
                 <button id="btn-zoom-in" class="px-2 py-1 hover:bg-slate-100 rounded-lg text-slate-700 font-bold text-xs transition" title="بزرگ‌نمایی (Zoom In)">+</button>
+                <button id="btn-zoom-fit" class="px-1.5 py-1 hover:bg-slate-100 rounded-lg text-slate-600 transition" title="کل عرض صفحه دیده شود (Fit Width)" aria-label="کل عرض صفحه دیده شود">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"></path><path d="M7 8l-4 4 4 4"></path><path d="M17 8l4 4-4 4"></path></svg>
+                </button>
                 <button id="btn-zoom-reset" class="px-1.5 py-1 hover:bg-slate-100 rounded-lg text-slate-600 font-bold text-[10px] transition" title="بازنشانی زوم به ۱۰۰٪">۱۰۰٪</button>
-                <button id="btn-zoom-out" class="px-2 py-1 hover:bg-slate-100 rounded-lg text-slate-700 font-bold text-xs transition" title="کوچک‌نمایی و دیدن کل صفحه (Zoom Out)">−</button>
+                <button id="btn-zoom-out" class="px-2 py-1 hover:bg-slate-100 rounded-lg text-slate-700 font-bold text-xs transition" title="کوچک‌نمایی تا دیدن کل عرض صفحه (Zoom Out)">−</button>
             </div>
             <div class="grid grid-cols-3 gap-0.5 items-center justify-items-center">
                 <div></div>
@@ -998,12 +1003,12 @@
             <div>
                 <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
                     <span>ضخامت ابزار:</span>
-                    <span id="slider-size-val">۱.۲ پیکسل</span>
+                    <span id="slider-size-val">۲.۵ پیکسل</span>
                 </div>
-                <input id="slider-stroke-size" type="range" min="0.5" max="20" step="0.1" value="1.2" class="w-full accent-blue-600">
+                <input id="slider-stroke-size" type="range" min="0.5" max="20" step="0.1" value="2.5" class="w-full accent-blue-600">
                 <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
-                    <span>۰.۵ (بسیار ریز/خودکار ۰.۳)</span>
-                    <span>۱.۲ (استاندارد ریز)</span>
+                    <span>۰.۵ (بسیار ریز)</span>
+                    <span>۲.۵ (پیش‌فرض)</span>
                     <span>۳+ (درشت)</span>
                 </div>
             </div>
@@ -1011,10 +1016,10 @@
             <div class="pt-2 border-t border-slate-100">
                 <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
                     <span>شدت زیبانویسی و صاف‌ساز خط:</span>
-                    <span id="slider-streamline-val" class="text-blue-600 font-semibold">۰٪ (خام و طبیعی)</span>
+                    <span id="slider-streamline-val" class="text-blue-600 font-semibold">۱۰۰٪ (حداکثر روانی)</span>
                 </div>
-                <input id="slider-streamline" type="range" min="0" max="100" value="0" class="w-full accent-blue-600">
-                <p class="text-[10px] text-slate-400 mt-1">روی ۰٪ دست‌خط ۱۰۰٪ خام، طبیعی و بدون هیچ فیلتری ثبت می‌شود</p>
+                <input id="slider-streamline" type="range" min="0" max="100" value="100" class="w-full accent-blue-600">
+                <p class="text-[10px] text-slate-400 mt-1">حین نوشتن عمداً کیفیت سبک می‌ماند تا قلم کند نشود؛ این صاف‌سازی کامل فقط یک‌بار، وقتی قلم را برمی‌داری، اعمال می‌شود.</p>
             </div>
 
             <div class="pt-2 border-t border-slate-100">
@@ -1138,7 +1143,7 @@
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                     دانلود فایل پشتیبان کل سالنامه (JSON)
                 </button>
-                <input type="file" id="input-backup-import" accept=".json" class="hidden">
+                <input type="file" id="input-backup-import" accept=".json,.jsonl,.txt" class="hidden">
                 <button id="btn-backup-import" class="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                     بارگذاری فایل پشتیبان از دستگاه دیگر
@@ -1162,6 +1167,26 @@
                     <button id="btn-backup-snapshot" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-[11px] font-semibold transition">ساخت نسخه بازیابی</button>
                 </div>
                 <div id="backup-status-msg" class="mt-2 text-[11px] font-medium text-slate-500"></div>
+            </div>
+
+            <!-- RAM-first mirror on the device's own file system (OPFS), no permission needed -->
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between gap-2">
+                    <h4 class="text-xs font-bold text-slate-800">نسخهٔ سریع روی حافظهٔ دستگاه</h4>
+                    <span id="fast-mirror-status" class="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">در حال بررسی</span>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                    نوشتن در حافظه می‌ماند و بعد از چند لحظه که قلم بیکار شد، همان صفحه در یک فایل روی خود دستگاه نوشته می‌شود. نه پوشه می‌خواهد، نه اجازه، و نه قلم را معطل می‌کند.
+                </p>
+                <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                    <label class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                        <input type="checkbox" id="fast-mirror-toggle" class="accent-blue-600" checked>
+                        فعال
+                    </label>
+                    <button id="btn-fast-mirror-restore" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-[11px] font-semibold transition">بازیابی از نسخهٔ سریع</button>
+                    <button id="btn-fast-mirror-clear" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg text-[11px] font-semibold transition">پاک کردن</button>
+                </div>
+                <div id="fast-mirror-msg" class="mt-2 text-[11px] font-medium text-slate-500"></div>
             </div>
 
             <div class="mt-4 pt-4 border-t border-slate-100">
@@ -1696,10 +1721,15 @@
                 this.dbName = 'JalaliSmartPlannerDB_1405_1406';
                 this.storeName = 'pages';
                 this.db = null;
+                // Two concurrent first calls (a save and a page load both starting before the
+                // open request finishes) used to open the database twice. Share one promise.
+                this.initPromise = null;
             }
 
             async init() {
-                return new Promise((resolve, reject) => {
+                if (this.db) return;
+                if (this.initPromise) return this.initPromise;
+                this.initPromise = new Promise((resolve, reject) => {
                     const req = indexedDB.open(this.dbName, 1);
                     req.onupgradeneeded = (e) => {
                         const db = e.target.result;
@@ -1709,10 +1739,15 @@
                     };
                     req.onsuccess = (e) => {
                         this.db = e.target.result;
+                        // A connection closed by the browser (storage pressure, another tab
+                        // deleting the DB) must not leave a dead handle that every later write
+                        // rejects against. Drop it so the next call re-opens.
+                        this.db.onclose = () => { this.db = null; };
                         resolve();
                     };
                     req.onerror = (e) => reject(e.target.error);
-                });
+                }).finally(() => { this.initPromise = null; });
+                return this.initPromise;
             }
 
             async getPage(dateKey) {
@@ -1731,9 +1766,14 @@
                 return new Promise((resolve, reject) => {
                     const tx = this.db.transaction(this.storeName, 'readwrite');
                     const store = tx.objectStore(this.storeName);
-                    const req = store.put(pageData);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => reject(req.error);
+                    store.put(pageData);
+                    // Resolve only when the transaction COMMITS. Resolving on the request's
+                    // success reported «ذخیره شد» before the data was durable: a quota error
+                    // aborts the transaction after the request succeeded, and the user was told
+                    // a page was safe when it had never been written.
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
                 });
             }
 
@@ -1751,7 +1791,10 @@
                                                (item.symbols && item.symbols.length > 0) ||
                                                (item.mindmapNodes && item.mindmapNodes.length > 0) ||
                                                (item.mindmapStrokes && item.mindmapStrokes.length > 0) ||
-                                               (item.priorities && item.priorities.some(p => p.trim() !== ''));
+                                               (item.mindmapTexts && item.mindmapTexts.length > 0) ||
+                                               (item.mindmapSymbols && item.mindmapSymbols.length > 0) ||
+                                               (item.mindmapImages && item.mindmapImages.length > 0) ||
+                                               (item.priorities && item.priorities.some(p => String(p || '').trim() !== ''));
                             if (hasContent) map.add(item.dateKey);
                         });
                         resolve(map);
@@ -1815,10 +1858,13 @@
                 this.snapshotStore = 'snapshots';
                 this.settingsStore = 'settings';
                 this.db = null;
+                this.initPromise = null;
             }
 
             async init() {
-                return new Promise((resolve, reject) => {
+                if (this.db) return;
+                if (this.initPromise) return this.initPromise;
+                this.initPromise = new Promise((resolve, reject) => {
                     const req = indexedDB.open(this.dbName, 1);
                     req.onupgradeneeded = (e) => {
                         const db = e.target.result;
@@ -1829,9 +1875,14 @@
                             db.createObjectStore(this.settingsStore, { keyPath: 'key' });
                         }
                     };
-                    req.onsuccess = (e) => { this.db = e.target.result; resolve(); };
+                    req.onsuccess = (e) => {
+                        this.db = e.target.result;
+                        this.db.onclose = () => { this.db = null; };
+                        resolve();
+                    };
                     req.onerror = (e) => reject(e.target.error);
-                });
+                }).finally(() => { this.initPromise = null; });
+                return this.initPromise;
             }
 
             async putSnapshot(record) {
@@ -1918,6 +1969,239 @@
             return (pages || []).filter(p => p && p.dateKey && p.dateKey !== GEMINI_SETTINGS_KEY);
         }
 
+        /**
+         * ============================================================================
+         * 3.2  FAST DISK MIRROR (RAM first, idle-time flush)
+         * ============================================================================
+         *
+         * IndexedDB is the source of truth and is already debounced, but every save still
+         * serializes the whole day. This mirror is the "Edge-like" second copy: the live stroke
+         * stays in RAM, and once the pen has been quiet for a moment the page is written to a
+         * real file in the browser's private on-disk file system (OPFS), off the drawing path.
+         * It uses only the page that changed, runs while the app is idle, and is skipped during
+         * a stroke, so it can never add pen latency. No folder picker and no permission prompt
+         * are required, and it works offline.
+         *
+         * It is deliberately NOT the primary store: OPFS can be cleared by the browser just
+         * like IndexedDB. The visible folder backup remains the copy that survives the device.
+         */
+        const FAST_MIRROR_DIR = 'fast-pages';
+        const FAST_MIRROR_QUIET_MS = 2200;
+        const FAST_MIRROR_MAX_DELAY_MS = 7000;
+        const fastMirror = {
+            supported: !!(typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.getDirectory === 'function'),
+            enabled: true,
+            rootPromise: null,
+            pending: new Map(),
+            timer: null,
+            firstPendingAt: 0,
+            writing: false,
+            lastWriteAt: 0,
+            lastError: null,
+
+            async getRoot() {
+                if (!this.supported) throw new Error('OPFS is not available');
+                if (!this.rootPromise) {
+                    this.rootPromise = navigator.storage.getDirectory().catch(err => {
+                        // Do not cache a rejected promise: a transient failure must be retryable.
+                        this.rootPromise = null;
+                        throw err;
+                    });
+                }
+                return this.rootPromise;
+            },
+            fileName(dateKey) {
+                return encodeURIComponent(String(dateKey)) + '.json';
+            },
+            /**
+             * The mirror is for the writing, not the PDF. A scanned textbook can be tens of
+             * megabytes and is already in IndexedDB; stringifying it on an idle timer would
+             * still freeze the tablet, and copying it into every day's mirror would waste the
+             * quota. The restore path merges the PDF back from IndexedDB when it is still there.
+             */
+            lightPage(page) {
+                if (!page || page.pdfDataBase64 === undefined) return page;
+                const light = { ...page };
+                delete light.pdfDataBase64;
+                return light;
+            },
+            arm() {
+                if (!this.supported || !this.enabled || this.writing) return;
+                if (this.pending.size === 0) return;
+                if (!this.firstPendingAt) this.firstPendingAt = Date.now();
+                if (this.timer) clearTimeout(this.timer);
+                // A short quiet period keeps the mirror off the pen; the max delay means a
+                // long uninterrupted writing session still gets a disk copy every few seconds.
+                const age = Date.now() - this.firstPendingAt;
+                const wait = Math.max(500, Math.min(FAST_MIRROR_QUIET_MS, FAST_MIRROR_MAX_DELAY_MS - age));
+                const run = () => {
+                    this.timer = null;
+                    if (typeof AppState !== 'undefined' && AppState.isDrawing) {
+                        this.timer = setTimeout(run, 400);
+                        return;
+                    }
+                    this.flush().catch(() => {});
+                };
+                this.timer = setTimeout(run, wait);
+            },
+            /** Queue the page that just committed to IndexedDB. Never awaited by the pen path. */
+            schedule(dateKey, page) {
+                if (!this.supported || !this.enabled || !dateKey || !page) return;
+                this.pending.set(dateKey, this.lightPage(page));
+                this.arm();
+            },
+            async flush() {
+                if (!this.supported || !this.enabled || this.writing || this.pending.size === 0) return;
+                this.writing = true;
+                let batch = null;
+                let failed = false;
+                try {
+                    const root = await this.getRoot();
+                    const dir = await root.getDirectoryHandle(FAST_MIRROR_DIR, { create: true });
+                    // Only pages queued before this point are written; a stroke that arrives
+                    // meanwhile stays queued and gets its own idle pass.
+                    batch = Array.from(this.pending.entries());
+                    this.pending.clear();
+                    this.firstPendingAt = 0;
+                    for (const [dateKey, page] of batch) {
+                        if (!this.enabled) break;
+                        // Do not serialize a big page while the user is drawing. The page stays
+                        // pending and the next idle window picks it up.
+                        if (typeof AppState !== 'undefined' && AppState.isDrawing) {
+                            this.pending.set(dateKey, page);
+                            continue;
+                        }
+                        // One bad page must not throw away the rest of the batch. It stays in
+                        // IndexedDB and the next save will queue it again.
+                        try {
+                            const handle = await dir.getFileHandle(this.fileName(dateKey), { create: true });
+                            const writable = await handle.createWritable();
+                            try {
+                                await writable.write(JSON.stringify(page));
+                                await writable.close();
+                            } catch (err) {
+                                try { await writable.abort(); } catch (_) {}
+                                throw err;
+                            }
+                            this.lastWriteAt = Date.now();
+                        } catch (err) {
+                            failed = true;
+                            this.lastError = err;
+                            console.warn('Fast disk mirror page failed:', dateKey, err);
+                        }
+                    }
+                    if (!failed) this.lastError = null;
+                } catch (err) {
+                    // IndexedDB already has the pages. A mirror failure is reported in the
+                    // backup panel, never allowed to interrupt writing. Put the untried batch
+                    // back so a transient file-system error gets another chance.
+                    this.lastError = err;
+                    console.warn('Fast disk mirror failed:', err);
+                    if (batch) {
+                        for (const [dateKey, page] of batch) {
+                            if (!this.pending.has(dateKey)) this.pending.set(dateKey, page);
+                        }
+                    }
+                } finally {
+                    this.writing = false;
+                    if (this.pending.size > 0) {
+                        if (!this.firstPendingAt) this.firstPendingAt = Date.now();
+                        this.arm();
+                    }
+                    this.safeUpdateUI();
+                }
+            },
+            safeUpdateUI() {
+                if (typeof updateFastMirrorUI !== 'function') return;
+                const modal = document.getElementById('modal-sync');
+                if (modal && !modal.classList.contains('hidden')) updateFastMirrorUI();
+            },
+            async readAllPages() {
+                if (!this.supported) return [];
+                const root = await this.getRoot();
+                let dir;
+                try {
+                    dir = await root.getDirectoryHandle(FAST_MIRROR_DIR);
+                } catch (_) {
+                    return [];
+                }
+                const pages = [];
+                for await (const handle of dir.values()) {
+                    if (!handle || handle.kind !== 'file' || !/\.json$/i.test(handle.name)) continue;
+                    try {
+                        const page = JSON.parse(await (await handle.getFile()).text());
+                        if (page && page.dateKey) pages.push(page);
+                    } catch (_) {}
+                }
+                return pages;
+            },
+            async summary() {
+                if (!this.supported) return { supported: false, count: 0, bytes: 0 };
+                try {
+                    const root = await this.getRoot();
+                    let dir;
+                    try {
+                        dir = await root.getDirectoryHandle(FAST_MIRROR_DIR);
+                    } catch (_) {
+                        return { supported: true, count: 0, bytes: 0 };
+                    }
+                    let count = 0, bytes = 0;
+                    for await (const handle of dir.values()) {
+                        if (!handle || handle.kind !== 'file' || !/\.json$/i.test(handle.name)) continue;
+                        count++;
+                        try { bytes += (await handle.getFile()).size; } catch (_) {}
+                    }
+                    return { supported: true, count, bytes };
+                } catch (_) {
+                    return { supported: true, count: 0, bytes: 0 };
+                }
+            },
+            async clearAll() {
+                this.pending.clear();
+                this.firstPendingAt = 0;
+                this.lastError = null;
+                if (!this.supported) return;
+                try {
+                    const root = await this.getRoot();
+                    await root.removeEntry(FAST_MIRROR_DIR, { recursive: true });
+                } catch (_) {}
+            },
+            /** Rebuild the mirror after an import/restore, in the background. */
+            async rebuildFromDB() {
+                if (!this.supported || !this.enabled) return;
+                try {
+                    const pages = backupSafePages(await dbEngine.exportAllPages());
+                    const keep = new Set();
+                    // The database is authoritative after an import or a restore. Drop stale
+                    // pending pages and stale mirror files, otherwise a later "restore from
+                    // fast copy" could resurrect a day that was deliberately deleted.
+                    this.pending.clear();
+                    this.firstPendingAt = 0;
+                    pages.forEach(page => {
+                        if (!page || !page.dateKey) return;
+                        this.pending.set(page.dateKey, this.lightPage(page));
+                        keep.add(this.fileName(page.dateKey));
+                    });
+                    const root = await this.getRoot();
+                    let dir = null;
+                    try { dir = await root.getDirectoryHandle(FAST_MIRROR_DIR); } catch (_) {}
+                    if (dir) {
+                        for await (const handle of dir.values()) {
+                            if (!handle || handle.kind !== 'file' || !/\.json$/i.test(handle.name)) continue;
+                            if (keep.has(handle.name)) continue;
+                            try { await dir.removeEntry(handle.name); } catch (_) {}
+                        }
+                    }
+                    this.arm();
+                } catch (err) {
+                    console.warn('Fast disk mirror rebuild failed:', err);
+                }
+            }
+        };
+        try {
+            fastMirror.enabled = localStorage.getItem('salname_fast_mirror') !== 'off';
+        } catch (_) {}
+
         function snapshotSummary(snap) {
             const pages = (snap && snap.pages) || [];
             let strokes = 0;
@@ -1991,49 +2275,334 @@
          * ============================================================================
          * 4. MATHEMATICAL INK BEAUTIFIER & STREAMLINE ENGINE
          * ============================================================================
-         * Micro-Detail & Loop Preserving Smoothing specifically tuned for Persian script:
-         * Preserves tight micro-loops (like 'م', 'و', 'ف'), dots ('ب', 'پ', 'ت'), solid circle filling, and sharp teeth ('س', 'ش')
-         * while smoothing out hand jitter on longer straight strokes.
+         * A pen stroke is not a polyline. Real ink has a body: it thins where the nib moves
+         * fast or the pressure drops, it keeps its width through a long straight, and it ends
+         * in a round cap. Drawing raw hardware samples with `lineTo` (the old behaviour) is
+         * exactly why handwriting looked angular and "cheap" — every sample became a corner,
+         * and the line weight never changed.
+         *
+         * This engine now produces a real variable-width ribbon:
+         *
+         *   1. `beautify()`  — de-duplicates and lightly low-passes the centreline. The
+         *                      smoothing is speed/corner aware: a sharp turn (the tooth of
+         *                      'س', the loop of 'م') is preserved, a long shaky straight is
+         *                      calmed. Never smooths the first/last sample away.
+         *   2. `densify()`   — replaces straight joins with the same midpoint-quadratic curve
+         *                      the live preview uses, so pen-up does not change the shape.
+         *   3. `buildRibbon()` — offsets that centreline by a pressure/velocity dependent
+         *                      radius on both sides and joins both sides with round caps.
+         *                      Filling the resulting outline is one canvas operation and it
+         *                      looks like ink instead of a tube: pressure up = thicker,
+         *                      speed up = thinner, ends round.
+         *
+         * Path2D outlines are cached per stroke object (see `inkPathCache`), so a full page
+         * repaint reuses the geometry instead of rebuilding it — and the live preview and the
+         * committed stroke share the same width function, which removes the "snap" on pen-up.
          */
+        const inkPathCache = new WeakMap();
+
         class InkBeautifier {
+            static clamp(v, lo, hi) {
+                return v < lo ? lo : (v > hi ? hi : v);
+            }
+
+            /**
+             * Centreline clean-up, applied once on pen-up.
+             *
+             * `intensity` is the user's «شدت زیبانویسی» slider (0–100). Even at 0 a very light
+             * pass runs: the samples that are closer than a third of a pixel are dropped (they
+             * carry no shape, only jitter), and corners are protected so Persian letters keep
+             * their teeth and loops. Raising the slider smooths long hand tremor more.
+             */
             static beautify(rawPoints, intensity = 0) {
                 if (!rawPoints || rawPoints.length === 0) return [];
-                // Return 100% raw hardware points untouched for zero-filter micro-writing
-                if (intensity <= 0 || rawPoints.length < 4) {
-                    return rawPoints.map(pt => ({ x: pt.x, y: pt.y, p: pt.p }));
-                }
 
-                const factor = (intensity / 100) * 0.08;
-                const nextPts = [rawPoints[0]];
-                for (let i = 1; i < rawPoints.length - 1; i++) {
-                    const prev = rawPoints[i - 1];
-                    const curr = rawPoints[i];
-                    const next = rawPoints[i + 1];
-
-                    const vx1 = curr.x - prev.x;
-                    const vy1 = curr.y - prev.y;
-                    const vx2 = next.x - curr.x;
-                    const vy2 = next.y - curr.y;
-
-                    const len1 = Math.hypot(vx1, vy1);
-                    const len2 = Math.hypot(vx2, vy2);
-
-                    let w = 0;
-                    if (len1 > 3 && len2 > 3) {
-                        const cosTheta = (vx1 * vx2 + vy1 * vy2) / (len1 * len2);
-                        if (cosTheta > 0.98) {
-                            w = factor * ((cosTheta - 0.98) / 0.02);
-                        }
+                // Drop duplicates / sub-pixel noise. Keeping the FIRST and LAST sample is
+                // deliberate: the start and end of a stroke are its pressure extremes.
+                const pts = [];
+                for (let i = 0; i < rawPoints.length; i++) {
+                    const p = rawPoints[i];
+                    if (!isFinite(p.x) || !isFinite(p.y)) continue;
+                    const last = pts[pts.length - 1];
+                    if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 0.3) {
+                        pts.push({ x: p.x, y: p.y, p: p.p, t: p.t });
                     }
-
-                    nextPts.push({
-                        x: curr.x * (1 - 2 * w) + (prev.x + next.x) * w,
-                        y: curr.y * (1 - 2 * w) + (prev.y + next.y) * w,
-                        p: curr.p
-                    });
                 }
-                nextPts.push(rawPoints[rawPoints.length - 1]);
-                return nextPts;
+                if (pts.length < 3) return pts;
+
+                const amount = InkBeautifier.clamp(intensity, 0, 100) / 100;
+                const strength = 0.16 + amount * 0.55;
+                const passes = amount > 0.55 ? 2 : 1;
+                let cur = pts;
+
+                for (let pass = 0; pass < passes; pass++) {
+                    const next = [cur[0]];
+                    for (let i = 1; i < cur.length - 1; i++) {
+                        const a = cur[i - 1];
+                        const b = cur[i];
+                        const c = cur[i + 1];
+                        const ax = b.x - a.x, ay = b.y - a.y;
+                        const bx = c.x - b.x, by = c.y - b.y;
+                        const la = Math.hypot(ax, ay) || 1;
+                        const lb = Math.hypot(bx, by) || 1;
+                        const cos = (ax * bx + ay * by) / (la * lb);
+                        // A real corner is left almost alone. Smoothing it is what turns the
+                        // tooth of 'س' into a soft curve and makes the script unreadable.
+                        const s = cos < 0.35 ? strength * 0.2 : strength;
+                        next.push({
+                            x: b.x + ((a.x + c.x) * 0.5 - b.x) * s,
+                            y: b.y + ((a.y + c.y) * 0.5 - b.y) * s,
+                            p: b.p,
+                            t: b.t
+                        });
+                    }
+                    next.push(cur[cur.length - 1]);
+                    cur = next;
+                }
+                return cur;
+            }
+
+            /** Local pen speed in paper px/ms, from a short symmetric window. */
+            static speedAt(points, i) {
+                const n = points.length;
+                if (n < 2) return 0;
+                const a = points[Math.max(0, i - 2)];
+                const b = points[Math.min(n - 1, i + 2)];
+                if (!a || !b || a === b) return 0;
+                const dist = Math.hypot(b.x - a.x, b.y - a.y);
+                const dt = (typeof a.t === 'number' && typeof b.t === 'number') ? (b.t - a.t) : 0;
+                // Without timestamps (old saved pages, synthetic points) fall back to a
+                // sample-rate assumption of roughly 4 ms per hardware sample.
+                if (dt > 0.5) return dist / dt;
+                return dist / Math.max(1, (Math.min(n - 1, i + 2) - Math.max(0, i - 2)) * 4);
+            }
+
+            /**
+             * Visual width at one sample. Always ≤ `size`, so every existing bounding box,
+             * erase hit-test and repaint pad stays valid.
+             */
+            static widthAt(points, i, size, opts = {}) {
+                let w = size;
+                if (opts.pressure !== false) {
+                    const p = typeof points[i].p === 'number' ? points[i].p : 0.5;
+                    // 0.5 (no pressure info) = the chosen width; light touch = 62% of it;
+                    // full pressure = 100%. Capped at `size` on purpose (see above).
+                    w *= InkBeautifier.clamp(0.62 + 0.5 * p, 0.62, 1.0);
+                }
+                if (opts.velocity) {
+                    const speed = InkBeautifier.speedAt(points, i);
+                    if (speed > 0) {
+                        w *= InkBeautifier.clamp(1.0 - (speed - 0.35) * 0.11, 0.72, 1.0);
+                    }
+                }
+                return Math.max(0.45, w);
+            }
+
+            /**
+             * The same midpoint-quadratic the live preview draws, sampled into a denser
+             * polyline. A straight `lineTo` between 120 Hz samples is still a corner at 2×
+             * zoom; a quadratic through the midpoints is not. Pressure is carried from the
+             * control point of each piece.
+             */
+            static densify(points, steps = 2) {
+                const n = points.length;
+                if (n < 3) return points.map(p => ({ x: p.x, y: p.y, p: p.p, t: p.t }));
+
+                const parts = Math.max(1, Math.min(6, Math.round(steps) || 2));
+                const out = [{ x: points[0].x, y: points[0].y, p: points[0].p, t: points[0].t }];
+                for (let i = 1; i < n - 1; i++) {
+                    const prev = points[i - 1];
+                    const cur = points[i];
+                    const next = points[i + 1];
+                    const sx = i === 1 ? prev.x : (prev.x + cur.x) * 0.5;
+                    const sy = i === 1 ? prev.y : (prev.y + cur.y) * 0.5;
+                    const ex = (cur.x + next.x) * 0.5;
+                    const ey = (cur.y + next.y) * 0.5;
+                    for (let k = 1; k <= parts; k++) {
+                        const t = k / parts;
+                        const mt = 1 - t;
+                        out.push({
+                            x: mt * mt * sx + 2 * mt * t * cur.x + t * t * ex,
+                            y: mt * mt * sy + 2 * mt * t * cur.y + t * t * ey,
+                            p: cur.p,
+                            t: cur.t
+                        });
+                    }
+                }
+                const last = points[n - 1];
+                out.push({ x: last.x, y: last.y, p: last.p, t: last.t });
+                return out;
+            }
+
+            /**
+             * Filled outline of a variable-width stroke.
+             *
+             * Both sides are offset along the local normal, then joined by a semicircular cap
+             * at each end. The normals come from a symmetric tangent, which keeps joins clean
+             * without the spikes a naive miter produces on the tight loops of Persian script.
+             */
+            static buildRibbon(points, size, opts = {}) {
+                const path = new Path2D();
+                if (!points || points.length === 0) return path;
+
+                // The live preview never calls this: it strokes the midpoint quadratics
+                // directly. Only the committed/final stroke pays for the denser outline.
+                const pts = opts.smooth ? InkBeautifier.densify(points, opts.densifySteps || 2) : points;
+                const n = pts.length;
+                if (n === 1) {
+                    const r = Math.max(0.55, InkBeautifier.widthAt(pts, 0, size, opts) * 0.5);
+                    path.arc(pts[0].x, pts[0].y, r, 0, Math.PI * 2);
+                    return path;
+                }
+
+                const radii = new Float32Array(n);
+                for (let i = 0; i < n; i++) {
+                    radii[i] = InkBeautifier.widthAt(pts, i, size, opts) * 0.5;
+                }
+                // A short symmetric low-pass on the radius so a single noisy pressure sample
+                // cannot make the outline bulge; the caps keep their own exact radius.
+                const rr = new Float32Array(n);
+                rr[0] = radii[0];
+                rr[n - 1] = radii[n - 1];
+                for (let i = 1; i < n - 1; i++) {
+                    rr[i] = (radii[i - 1] + radii[i] * 2 + radii[i + 1]) * 0.25;
+                }
+
+                const left = new Array(n);
+                const right = new Array(n);
+                for (let i = 0; i < n; i++) {
+                    const a = pts[Math.max(0, i - 1)];
+                    const b = pts[Math.min(n - 1, i + 1)];
+                    let dx = b.x - a.x;
+                    let dy = b.y - a.y;
+                    let len = Math.hypot(dx, dy);
+                    if (len < 1e-6) {
+                        dx = 1; dy = 0; len = 1;
+                    }
+                    const nx = -dy / len;
+                    const ny = dx / len;
+                    left[i] = { x: pts[i].x + nx * rr[i], y: pts[i].y + ny * rr[i] };
+                    right[i] = { x: pts[i].x - nx * rr[i], y: pts[i].y - ny * rr[i] };
+                }
+
+                // Forward side (left offsets).
+                path.moveTo(left[0].x, left[0].y);
+                for (let i = 1; i < n; i++) {
+                    path.quadraticCurveTo(
+                        left[i - 1].x, left[i - 1].y,
+                        (left[i - 1].x + left[i].x) * 0.5,
+                        (left[i - 1].y + left[i].y) * 0.5
+                    );
+                }
+                path.lineTo(left[n - 1].x, left[n - 1].y);
+
+                // End cap, swept through the direction of travel.
+                const end = pts[n - 1];
+                let ang = Math.atan2(left[n - 1].y - end.y, left[n - 1].x - end.x);
+                const capSteps = 8;
+                for (let k = 1; k <= capSteps; k++) {
+                    ang -= Math.PI / capSteps;
+                    path.lineTo(end.x + Math.cos(ang) * rr[n - 1], end.y + Math.sin(ang) * rr[n - 1]);
+                }
+
+                // Backward side (right offsets).
+                for (let i = n - 1; i > 0; i--) {
+                    path.quadraticCurveTo(
+                        right[i].x, right[i].y,
+                        (right[i].x + right[i - 1].x) * 0.5,
+                        (right[i].y + right[i - 1].y) * 0.5
+                    );
+                }
+                path.lineTo(right[0].x, right[0].y);
+
+                // Start cap, swept through the backward direction.
+                const start = pts[0];
+                ang = Math.atan2(right[0].y - start.y, right[0].x - start.x);
+                for (let k = 1; k <= capSteps; k++) {
+                    ang -= Math.PI / capSteps;
+                    path.lineTo(start.x + Math.cos(ang) * rr[0], start.y + Math.sin(ang) * rr[0]);
+                }
+                path.closePath();
+                return path;
+            }
+
+            /**
+             * Smooth centreline (midpoint quadratics) for the highlighter.
+             *
+             * A marker has a constant width — a ribbon with round joins visibly blobs on the
+             * tight turns of Persian script. Stroking this path with a fixed width is both
+             * closer to the real tool and cheaper than an outline.
+             */
+            static buildCenterline(points) {
+                const path = new Path2D();
+                const n = points.length;
+                if (!n) return path;
+                path.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < n - 1; i++) {
+                    path.quadraticCurveTo(
+                        points[i].x, points[i].y,
+                        (points[i].x + points[i + 1].x) * 0.5,
+                        (points[i].y + points[i + 1].y) * 0.5
+                    );
+                }
+                if (n > 1) path.lineTo(points[n - 1].x, points[n - 1].y);
+                return path;
+            }
+
+            /** Closed centreline, used only to fill circle/ellipse shapes. */
+            static buildArea(points) {
+                const path = new Path2D();
+                const pts = InkBeautifier.densify(points);
+                if (!pts.length) return path;
+                path.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) path.lineTo(pts[i].x, pts[i].y);
+                path.closePath();
+                return path;
+            }
+
+            /** Polyline path for ruler/rect/arrow shapes, which must stay geometrically sharp. */
+            static buildSharp(points) {
+                const path = new Path2D();
+                if (!points || !points.length) return path;
+                path.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) path.lineTo(points[i].x, points[i].y);
+                return path;
+            }
+
+            /**
+             * Geometry cache. Keyed by the stroke object, but validated against the points
+             * ARRAY REFERENCE, size, tool and whether it has a fill — so an in-place edit that
+             * is not routed through the invalidation helper still cannot draw stale geometry.
+             */
+            static geometryFor(stroke) {
+                const pts = stroke.points;
+                const size = Math.max(0.2, stroke.size || 1.2);
+                const marker = stroke.tool === 'highlighter';
+                const fill = !!(stroke.fillColor && stroke.fillColor !== 'transparent');
+                let rec = inkPathCache.get(stroke);
+                if (rec && rec.pts === pts && rec.size === size && rec.marker === marker && rec.fill === fill) {
+                    return rec;
+                }
+                // 2 samples per curve in the live draft; 4 in the final outline that is
+                // built once on pen-up. This is the quality jump the user asked for, and it
+                // costs nothing while the pen is still moving.
+                const opts = marker
+                    ? { pressure: false, velocity: false, smooth: true }
+                    : { pressure: true, velocity: true, smooth: true, densifySteps: 4 };
+                rec = {
+                    pts,
+                    size,
+                    marker,
+                    fill,
+                    // Pen: a filled variable-width outline. Highlighter: a fixed-width
+                    // centreline, because a marker does not taper (and a wide ribbon blobs
+                    // on the tight loops of Persian script).
+                    ribbon: marker ? null : InkBeautifier.buildRibbon(pts, size, opts),
+                    center: marker ? InkBeautifier.buildCenterline(pts) : null,
+                    area: fill ? InkBeautifier.buildArea(pts) : null
+                };
+                inkPathCache.set(stroke, rec);
+                return rec;
             }
 
             static renderSmoothStroke(ctx, stroke) {
@@ -2046,22 +2615,15 @@
 
                 const hasFill = stroke.fillColor && stroke.fillColor !== 'transparent';
                 const hasStroke = !stroke.color || stroke.color !== 'transparent';
-                const strokeWidth = stroke.size || 1.2;
+                const size = Math.max(0.2, stroke.size || 1.2);
 
-                ctx.strokeStyle = hasStroke ? (stroke.color || '#0F172A') : 'rgba(0,0,0,0)';
-                ctx.lineWidth = strokeWidth;
-
-                // Check for single dot or tap (e.g. dots of Persian letters: پ, ت, چ, ج)
+                // A tap (the dots of پ, ت, چ, ج): one round nib mark, never a line.
                 if (pts.length <= 2) {
-                    let totalDist = 0;
-                    if (pts.length === 2) {
-                        totalDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-                    }
-                    if (pts.length === 1 || totalDist < 1.8) {
+                    const dist = pts.length === 2 ? Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) : 0;
+                    if (pts.length === 1 || dist < 1.8) {
                         if (hasStroke) {
                             ctx.beginPath();
-                            const dotRadius = Math.max(0.9, strokeWidth * 0.55);
-                            ctx.arc(pts[0].x, pts[0].y, dotRadius, 0, Math.PI * 2);
+                            ctx.arc(pts[0].x, pts[0].y, Math.max(0.55, size * 0.5), 0, Math.PI * 2);
                             ctx.fillStyle = stroke.color || '#0F172A';
                             ctx.fill();
                         }
@@ -2070,19 +2632,38 @@
                     }
                 }
 
-                // Direct hardware point connection: 100% faithful polyline rendering
-                ctx.beginPath();
-                ctx.moveTo(pts[0].x, pts[0].y);
-                for (let i = 1; i < pts.length; i++) {
-                    ctx.lineTo(pts[i].x, pts[i].y);
+                if (stroke.isSharpGeometry) {
+                    const sharp = InkBeautifier.buildSharp(pts);
+                    if (hasFill) {
+                        ctx.fillStyle = stroke.fillColor;
+                        ctx.fill(sharp);
+                    }
+                    if (hasStroke) {
+                        ctx.strokeStyle = stroke.color || '#0F172A';
+                        ctx.lineWidth = size;
+                        ctx.stroke(sharp);
+                    }
+                    ctx.restore();
+                    return;
                 }
 
-                if (hasFill && pts.length >= 3) {
+                const geo = InkBeautifier.geometryFor(stroke);
+                if (hasFill && geo.area) {
                     ctx.fillStyle = stroke.fillColor;
-                    ctx.fill();
+                    ctx.fill(geo.area);
                 }
                 if (hasStroke) {
-                    ctx.stroke();
+                    ctx.fillStyle = stroke.color || '#0F172A';
+                    if (stroke.tool === 'highlighter') {
+                        ctx.strokeStyle = stroke.color || '#0F172A';
+                        ctx.lineWidth = size;
+                        ctx.stroke(geo.center);
+                    } else {
+                        // The ribbon is a closed outline: filling it is the ink. Stroking it
+                        // would draw the outline twice and make every stroke look bolder than
+                        // the width the user chose.
+                        ctx.fill(geo.ribbon);
+                    }
                 }
                 ctx.restore();
             }
@@ -2191,9 +2772,11 @@
             workspaceMode: 'planner',
             activeTool: 'pen',
             activeColor: '#0F172A',
-            penSize: 1.2,              // Ultra-fine default for realistic, small Persian handwriting
+            penSize: 2.5,              // Readable default on a tablet, still fine enough for Persian
             highlighterSize: 16,
-            streamlineIntensity: 0,    // 0% raw natural input
+            // «زیبانویسی» slider. It is applied ONLY when the pen lifts, so it can run at
+            // maximum without costing a single frame while the user is writing.
+            streamlineIntensity: 100,
             straightLineMode: false,
             activeShape: 'rect',
             shapeStrokeColor: '#0F172A',
@@ -2218,6 +2801,9 @@
 
             // Zoom & 2D Pan State for Portrait & Landscape Tablet Navigation
             zoomScale: 1.0,
+            // True only while the user is in the one-tap fit-to-width mode. A rotation or
+            // window resize re-fits the whole width instead of leaving the page half off-screen.
+            fitWidthMode: false,
             // 'max' renders ink at the display's own pixel ratio; 'smooth' drops the drawing
             // layers to 1:1 device pixels for tablets whose GPU cannot keep up. See
             // setPenQuality(). A device setting, so it is remembered in localStorage.
@@ -2283,6 +2869,15 @@
          * Prevents Windows 10 from freezing or canceling pen strokes when drawing 'م', 'ب', or filled circles.
          */
         const blockRightClickAndHold = (e) => {
+            // Right-click must stay disabled over the paper (a Windows press-and-hold ring can
+            // cancel a pen stroke), but never inside a text field: it is how users paste an API
+            // key, a note, or a formula. This handler is on `window`, so it used to kill the
+            // context menu in every input in the app.
+            const target = e.target;
+            if (target && typeof target.closest === 'function' &&
+                target.closest('input, textarea, select, [contenteditable="true"]')) {
+                return;
+            }
             e.preventDefault();
             e.stopPropagation();
             return false;
@@ -2336,6 +2931,10 @@
         // Set when something we cannot measure drew on the layer (shape previews, the lasso,
         // the selection handles). The next wipe then falls back to the safe full-page clear.
         let liveInkUntracked = false;
+        // The width chosen when the current stroke started. `drawIncrementalSegments` changes
+        // ctxInteraction.lineWidth per sample (that is what makes the live line taper like the
+        // committed one), so the chosen width cannot be read back from the context afterwards.
+        let liveStrokeWidth = 1.2;
 
         // Eraser size, in CSS pixels. One constant drives BOTH the erase hit-test and the
         // on-screen ring, so the circle you see is exactly the area that gets erased.
@@ -2465,8 +3064,40 @@
          * Allows smooth zooming (Pinch-to-Zoom or +/- buttons) and 4-way panning (left, right, up, down)
          * in both Portrait and Landscape tablet modes, while locking out accidental palm jumps when writing!
          */
-        function applyZoomScale(newZoom) {
-            AppState.zoomScale = Math.min(2.2, Math.max(0.45, newZoom));
+        const ZOOM_MAX_SCALE = 2.2;
+        const ZOOM_MIN_SCALE = 0.1;
+        let zoomLimitsCache = null;
+
+        /**
+         * The scale at which the FULL 1450px sheet fits inside the viewport, with the desk
+         * padding subtracted. `clientWidth` excludes a vertical scrollbar, so this stays exact
+         * when the page is taller than the screen.
+         */
+        function getFitWidthZoom() {
+            const vw = viewport.clientWidth || 1;
+            const pw = paperStage.clientWidth || 1450;
+            if (!zoomLimitsCache || zoomLimitsCache.vw !== vw || zoomLimitsCache.pw !== pw) {
+                const cs = getComputedStyle(viewport);
+                const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+                // Two spare pixels absorb sub-pixel rounding, so a fit never leaves a 1px
+                // horizontal scrollbar that hides the right edge of the page.
+                const fit = Math.max(0.05, (vw - padX - 2) / pw);
+                zoomLimitsCache = {
+                    vw,
+                    pw,
+                    fit,
+                    // Pinching out stops at the full-width view. Going below it only made the
+                    // ruled lines look cramped and squeezed handwriting into an unreadable size.
+                    min: Math.max(ZOOM_MIN_SCALE, Math.min(1, fit))
+                };
+            }
+            return zoomLimitsCache.fit;
+        }
+
+        function applyZoomScale(newZoom, options = {}) {
+            if (!options.keepFitMode) AppState.fitWidthMode = false;
+            const minZoom = Math.max(ZOOM_MIN_SCALE, Math.min(1, getFitWidthZoom()));
+            AppState.zoomScale = Math.min(ZOOM_MAX_SCALE, Math.max(minZoom, newZoom));
             // `zoom`, never `transform: scale()`. A transform leaves the layout size untouched, so
             // the scroller could not reach the zoomed part of the page at all — see #paper-stage.
             // `zoom` also keeps getBoundingClientRect() in visual pixels, which is what
@@ -2480,12 +3111,35 @@
             if (btnReset) {
                 btnReset.textContent = `${toPersianDigits(Math.round(AppState.zoomScale * 100))}٪`;
             }
+            const btnFit = document.getElementById('btn-zoom-fit');
+            if (btnFit) {
+                btnFit.classList.toggle('bg-blue-50', AppState.fitWidthMode);
+                btnFit.classList.toggle('text-blue-700', AppState.fitWidthMode);
+            }
+            cachedCanvasRect = paperStage.getBoundingClientRect();
+        }
+
+        function fitPaperToViewportWidth() {
+            AppState.fitWidthMode = true;
+            applyZoomScale(getFitWidthZoom(), { keepFitMode: true });
+            // RTL: scrollLeft 0 is the right edge, which is the start of a Persian page.
+            // At an exact fit there is no horizontal overflow anyway; this also guarantees the
+            // page starts at the top instead of leaving the previous scroll offset behind.
+            viewport.scrollTop = 0;
+            viewport.scrollLeft = 0;
             cachedCanvasRect = paperStage.getBoundingClientRect();
         }
 
         document.getElementById('btn-zoom-in').addEventListener('click', () => applyZoomScale(AppState.zoomScale + 0.15));
         document.getElementById('btn-zoom-out').addEventListener('click', () => applyZoomScale(AppState.zoomScale - 0.15));
         document.getElementById('btn-zoom-reset').addEventListener('click', () => applyZoomScale(1.0));
+        document.getElementById('btn-zoom-fit').addEventListener('click', fitPaperToViewportWidth);
+
+        // If the tablet is rotated while fit-to-width is active, keep the whole width visible
+        // instead of leaving the page at the old orientation's scale.
+        window.addEventListener('resize', () => {
+            if (AppState.fitWidthMode) fitPaperToViewportWidth();
+        });
 
         // 4-Direction Quick Scroll Buttons (Up, Down, Left, Right)
         document.getElementById('btn-scroll-up').addEventListener('click', () => {
@@ -2571,13 +3225,21 @@
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/pdfjs/pdf.worker.min.js';
         }
 
+        // Day changes and file picks can overlap. Only the newest PDF load may write the global
+        // document state: a slow decode of the previous day otherwise finished last and put the
+        // old PDF over the new day's ink.
+        let pdfLoadToken = 0;
+
         async function loadPdfFromBase64(base64Data, pageNum = 1) {
+            const loadToken = ++pdfLoadToken;
             if (!base64Data || !window.pdfjsLib) {
                 AppState.pdfDocInstance = null;
+                AppState.pdfTotalPages = 0;
+                AppState.pdfPageNum = 1;
                 renderPdfBackground();
                 document.getElementById('pdf-controls-bar').classList.add('hidden');
                 document.getElementById('pdf-controls-bar').classList.remove('flex');
-                return;
+                return false;
             }
             try {
                 const raw = atob(base64Data.split(',')[1] || base64Data);
@@ -2585,7 +3247,9 @@
                 for (let i = 0; i < raw.length; i++) uint8Array[i] = raw.charCodeAt(i);
 
                 const loadingTask = window.pdfjsLib.getDocument({ data: uint8Array });
-                AppState.pdfDocInstance = await loadingTask.promise;
+                const doc = await loadingTask.promise;
+                if (loadToken !== pdfLoadToken) return null;
+                AppState.pdfDocInstance = doc;
                 AppState.pdfTotalPages = AppState.pdfDocInstance.numPages;
                 AppState.pdfPageNum = Math.min(Math.max(1, pageNum), AppState.pdfTotalPages);
 
@@ -2593,8 +3257,22 @@
                 document.getElementById('pdf-controls-bar').classList.add('flex');
                 updatePdfControlsUI();
                 await renderPdfBackground();
+                // Superseded while the page was drawing: the caller must not save this file as
+                // the current PDF (the newer pick already owns the screen).
+                if (loadToken !== pdfLoadToken) return null;
+                return true;
             } catch (err) {
                 console.error('PDF Load Error:', err);
+                if (loadToken !== pdfLoadToken) return null;
+                // A corrupt / encrypted file must not leave the previous document's page and
+                // controls on screen as if the new one had loaded.
+                AppState.pdfDocInstance = null;
+                AppState.pdfTotalPages = 0;
+                AppState.pdfPageNum = 1;
+                document.getElementById('pdf-controls-bar').classList.add('hidden');
+                document.getElementById('pdf-controls-bar').classList.remove('flex');
+                renderPdfBackground();
+                return false;
             }
         }
 
@@ -2603,7 +3281,25 @@
                 `${toPersianDigits(AppState.pdfPageNum)} / ${toPersianDigits(AppState.pdfTotalPages)}`;
         }
 
+        // One PDF page is rendered at a time. A resize or a fast page change used to start a
+        // second render on the same canvas while the first one was still running, which PDF.js
+        // rejects ("Cannot use the same canvas during multiple render() operations") and which
+        // could also draw the old page over the new one.
+        let pdfRenderTask = null;
+        let pdfRenderToken = 0;
+
         async function renderPdfBackground() {
+            const token = ++pdfRenderToken;
+            if (pdfRenderTask) {
+                try { pdfRenderTask.cancel(); } catch (_) {}
+                pdfRenderTask = null;
+                // PDF.js removes the canvas from its "currently rendering" set on the next
+                // tick. Starting the replacement in the same tick can still be rejected as a
+                // second concurrent render on that canvas, so yield once.
+                await new Promise(resolve => setTimeout(resolve, 0));
+                if (token !== pdfRenderToken) return;
+            }
+
             const w = paperStage.clientWidth;
             const h = paperStage.clientHeight;
             // No PDF open → the layer is retired completely (1x1 backing store, removed from the
@@ -2616,16 +3312,26 @@
                 ctxPdf.clearRect(0, 0, 1, 1);
                 return;
             }
-            if (canvasPdf.style.display === 'none' || canvasPdf.width <= 1) {
+            if (!w || !h) return;
+
+            // Resize whenever the paper changed, not only when the layer was retired. The old
+            // check left the PDF on its original backing store after a window resize or after
+            // the mind-map grew the page, so a larger page was clipped to the old bitmap.
+            const wantW = Math.max(1, Math.floor(w * dpr));
+            const wantH = Math.max(1, Math.floor(h * dpr));
+            if (canvasPdf.style.display === 'none' || canvasPdf.width !== wantW || canvasPdf.height !== wantH) {
                 canvasPdf.style.display = '';
                 canvasPdf.width = w * dpr;
                 canvasPdf.height = h * dpr;
-                ctxPdf.setTransform(dpr, 0, 0, dpr, 0, 0);
             }
+            // A new backing store resets the context, and a previous failed render may have left
+            // a translate behind; always start from the known DPR transform.
+            ctxPdf.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctxPdf.clearRect(0, 0, w, h);
 
             try {
                 const page = await AppState.pdfDocInstance.getPage(AppState.pdfPageNum);
+                if (token !== pdfRenderToken) return;
                 const unscaledViewport = page.getViewport({ scale: 1 });
                 const scale = Math.min((w - 80) / unscaledViewport.width, (h - 40) / unscaledViewport.height);
                 const scaledViewport = page.getViewport({ scale });
@@ -2635,13 +3341,24 @@
 
                 ctxPdf.save();
                 ctxPdf.translate(offsetX, offsetY);
-                await page.render({
+                const task = page.render({
                     canvasContext: ctxPdf,
                     viewport: scaledViewport
-                }).promise;
-                ctxPdf.restore();
+                });
+                pdfRenderTask = task;
+                try {
+                    await task.promise;
+                } finally {
+                    if (pdfRenderTask === task) pdfRenderTask = null;
+                    // `restore()` must run even if the render was cancelled or threw, or the
+                    // translate would leak into every following render.
+                    ctxPdf.restore();
+                }
             } catch (e) {
-                console.error('PDF Render Error:', e);
+                // A cancellation is expected when the page/resize changes mid-render.
+                if (!e || e.name !== 'RenderingCancelledException') {
+                    console.error('PDF Render Error:', e);
+                }
             }
         }
 
@@ -2686,6 +3403,30 @@
             }
             return out;
         }
+        /**
+         * The undo/redo copy used on the hot path.
+         *
+         * A full deep copy of every point is what made an eraser touch-down — and the instant
+         * after every letter — hitch on a tablet: a page with 500 strokes × 60 points cost
+         * ~10 ms on a desktop and several times that on a stylus tablet, right before the app
+         * was expected to react to the pen.
+         *
+         * Point arrays are immutable by contract: every edit assigns a NEW array (see
+         * `ensureHandwritingBelowMindMap`, `scaleSelectedObjectsByFactor` and the lasso
+         * transforms), and the eraser builds new strokes instead of editing points. That lets
+         * a snapshot copy the stroke objects (so `s.color` / `s.size` cannot rewrite history)
+         * while sharing the point arrays. Cost drops from O(points) to O(strokes), and the
+         * 40 undo slots stop holding 40 copies of every point.
+         */
+        function snapshotStrokesInto(list) {
+            const src = list || [];
+            const out = new Array(src.length);
+            for (let i = 0; i < src.length; i++) {
+                const s = src[i];
+                out[i] = { ...s, points: s.points || [] };
+            }
+            return out;
+        }
         function cloneFlatInto(list) {
             const src = list || [];
             const out = new Array(src.length);
@@ -2696,7 +3437,7 @@
         function clonePageState() {
             syncActiveBuffersToStorage();
             return {
-                strokes: cloneStrokesInto(AppState.strokes),
+                strokes: snapshotStrokesInto(AppState.strokes),
                 texts: cloneFlatInto(AppState.texts),
                 symbols: cloneFlatInto(AppState.symbols),
                 mindmapNodes: cloneFlatInto(AppState.mindmapData.nodes),
@@ -2844,11 +3585,20 @@
                 saveTimeout = null;
                 pendingSaveKey = null;
                 try {
+                    // Capture the mirror payload BEFORE the await: switching day while the
+                    // IndexedDB transaction is committing must not label the new day's buffers
+                    // with the old day's key.
+                    const mirrorPayload = buildPagePayload(dateKey);
                     await dbEngine.savePage(buildPagePayload(dateKey));
                     setSaveIndicator('saved');
-                    // Only after a write that really succeeded: the recovery copy and the folder
-                    // file both mirror the database, so a failed save must never trigger them.
+                    if (saveTimeout || pendingSaveKey) setSaveIndicator('saving');
                     maybeAutoSnapshot('ذخیره خودکار');
+                    // A second, idle-time copy of just this day on the device's real file
+                    // system. Never awaited here: the pen must not wait for a disk write.
+                    fastMirror.schedule(dateKey, mirrorPayload);
+                    // The amber indicator above means the user kept writing while this write was
+                    // in flight, so a newer save is queued. Only a committed write may trigger
+                    // the recovery copy and the folder mirror.
                     writeFolderBackup(false);
                 } catch (err) {
                     // A failed write used to be an unhandled rejection that left the header
@@ -2870,7 +3620,9 @@
             const dateKey = pendingSaveKey;
             pendingSaveKey = null;
             try {
-                await dbEngine.savePage(buildPagePayload(dateKey));
+                const payload = buildPagePayload(dateKey);
+                await dbEngine.savePage(payload);
+                fastMirror.schedule(dateKey, payload);
                 setSaveIndicator('saved');
             } catch (err) {
                 console.error('Flush save failed:', err);
@@ -3729,8 +4481,11 @@
             if (minInkY < targetHandwritingStartY && minInkY !== Infinity) {
                 const deltaY = targetHandwritingStartY - minInkY;
                 strokes.forEach(s => {
-                    s.points.forEach(p => { p.y += deltaY; });
-                    // Edited in place, so the eraser's cached box for this stroke is now wrong.
+                    // Assign a NEW point array instead of editing points in place: undo
+                    // snapshots share point arrays with the live strokes (see
+                    // snapshotStrokesInto), so mutating one would rewrite history.
+                    s.points = s.points.map(p => ({ ...p, y: p.y + deltaY }));
+                    // The stroke object is edited in place, so its cached box is now wrong.
                     invalidateStrokeBox(s);
                 });
                 texts.forEach(t => { t.y += deltaY; });
@@ -4041,13 +4796,15 @@
             const pts = AppState.currentRawPoints;
             if (pts.length === 0) return;
 
-            const strokeW = ctxInteraction.lineWidth;
+            const strokeW = liveStrokeWidth || 1.2;
+            const isHighlighter = AppState.activeTool === 'highlighter';
 
             // What this batch can put on the layer — tracked so pen-up only has to wipe this
             // rectangle. Only the samples that are actually redrawn take part (the last couple
             // are overdrawn on every batch), otherwise the per-sample cost would climb with the
             // length of the stroke.
             const first = Math.max(0, fromIdx - 2);
+            const batchStart = Math.max(1, first);
             let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
             const include = (p) => {
                 if (p.x < bx0) bx0 = p.x;
@@ -4055,9 +4812,9 @@
                 if (p.x > bx1) bx1 = p.x;
                 if (p.y > by1) by1 = p.y;
             };
-            for (let i = first; i < pts.length; i++) include(pts[i]);
+            for (let i = Math.max(0, batchStart - 1); i < pts.length; i++) include(pts[i]);
             if (predictedPt) include(predictedPt);
-            const inkPad = Math.max(4, strokeW * 0.5 + 6);
+            const inkPad = Math.max(4, strokeW * 0.75 + 6);
             trackLiveInk({ x0: bx0 - inkPad, y0: by0 - inkPad, x1: bx1 + inkPad, y1: by1 + inkPad });
 
             // A translucent preview (the highlighter) is painted at 38% alpha, so the couple of
@@ -4066,47 +4823,65 @@
             // renderInteractionOverlay) and the pen — the tool this app is written with — never
             // touches that property at all.
 
-            ctxInteraction.beginPath();
+            ctxInteraction.strokeStyle = AppState.activeTool === 'shape' ? AppState.shapeStrokeColor : AppState.activeColor;
+            ctxInteraction.lineCap = 'round';
+            ctxInteraction.lineJoin = 'round';
 
             if (pts.length <= 2) {
                 let dist = 0;
                 if (pts.length === 2) dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
                 if (pts.length === 1 || dist < 1.8) {
-                    ctxInteraction.arc(pts[0].x, pts[0].y, Math.max(0.9, strokeW * 0.55), 0, Math.PI * 2);
+                    const w = isHighlighter ? strokeW : InkBeautifier.widthAt(pts, 0, strokeW, { pressure: true, velocity: false });
+                    ctxInteraction.beginPath();
+                    ctxInteraction.arc(pts[0].x, pts[0].y, Math.max(0.55, w * 0.5), 0, Math.PI * 2);
+                    ctxInteraction.fillStyle = ctxInteraction.strokeStyle;
                     ctxInteraction.fill();
                     return;
                 }
             }
 
-            // The live preview used to join the hardware samples with straight lines, so the ink
-            // looked angular and "cheap" WHILE writing and only became smooth after the pen was
-            // lifted (when the committed stroke was redrawn). Now the live stroke is smoothed the
-            // same way the committed one is — quadratic curves through the midpoints of the
-            // samples — so what you write is what you keep. The last couple of segments are
-            // redrawn on each batch and simply overdraw themselves, which is invisible with the
-            // solid pen colours.
-            if (first === 0) {
-                ctxInteraction.moveTo(pts[0].x, pts[0].y);
-            } else {
-                ctxInteraction.moveTo(
-                    (pts[first - 1].x + pts[first].x) / 2,
-                    (pts[first - 1].y + pts[first].y) / 2
-                );
+            // The live preview and the committed stroke now share BOTH the curve geometry
+            // (midpoint quadratics) and the width function. Each piece is stroked with its own
+            // pressure/velocity width, and round caps make the joints invisible — this is what
+            // gives the live line the calligraphic body it used to lose on pen-up.
+            for (let i = batchStart; i < pts.length; i++) {
+                const prev = pts[i - 1];
+                const cur = pts[i];
+                const next = pts[i + 1];
+                const w = isHighlighter
+                    ? strokeW
+                    : InkBeautifier.widthAt(pts, i, strokeW, { pressure: true, velocity: true });
+
+                ctxInteraction.beginPath();
+                if (i === 1) {
+                    ctxInteraction.moveTo(pts[0].x, pts[0].y);
+                } else {
+                    ctxInteraction.moveTo((prev.x + cur.x) * 0.5, (prev.y + cur.y) * 0.5);
+                }
+                if (next) {
+                    ctxInteraction.quadraticCurveTo(
+                        cur.x, cur.y,
+                        (cur.x + next.x) * 0.5,
+                        (cur.y + next.y) * 0.5
+                    );
+                } else {
+                    ctxInteraction.lineTo(cur.x, cur.y);
+                }
+                ctxInteraction.lineWidth = w;
+                ctxInteraction.stroke();
             }
-            for (let i = first; i < pts.length - 1; i++) {
-                ctxInteraction.quadraticCurveTo(
-                    pts[i].x, pts[i].y,
-                    (pts[i].x + pts[i + 1].x) / 2,
-                    (pts[i].y + pts[i + 1].y) / 2
-                );
-            }
-            const tail = pts[pts.length - 1];
+
             if (predictedPt) {
-                ctxInteraction.quadraticCurveTo(tail.x, tail.y, predictedPt.x, predictedPt.y);
-            } else {
-                ctxInteraction.lineTo(tail.x, tail.y);
+                const tail = pts[pts.length - 1];
+                const w = isHighlighter
+                    ? strokeW
+                    : InkBeautifier.widthAt(pts, pts.length - 1, strokeW, { pressure: true, velocity: false });
+                ctxInteraction.beginPath();
+                ctxInteraction.moveTo(tail.x, tail.y);
+                ctxInteraction.lineTo(predictedPt.x, predictedPt.y);
+                ctxInteraction.lineWidth = w;
+                ctxInteraction.stroke();
             }
-            ctxInteraction.stroke();
         }
 
         /**
@@ -4125,34 +4900,39 @@
             predictionBox = null;
         }
         function drawPredictedTail(e) {
-            if (typeof e.getPredictedEvents !== 'function') return;
             let predicted = [];
-            try {
-                predicted = e.getPredictedEvents() || [];
-            } catch (_) {
-                return;
+            if (e && typeof e.getPredictedEvents === 'function') {
+                try {
+                    predicted = e.getPredictedEvents() || [];
+                } catch (_) {
+                    predicted = [];
+                }
+                if (penMeter.open) {
+                    penMeter.predChances++;
+                    if (predicted.length > 0) penMeter.predHits++;
+                }
             }
-            // The meter's «پیشبینی قلم» line: how often Chromium offers a guess at all. A device
-            // that never returns one trails further behind the nib no matter what the code does.
-            if (penMeter.open) {
-                penMeter.predChances++;
-                if (predicted.length > 0) penMeter.predHits++;
-            }
-
-            if (predicted.length === 0) return;
 
             const pts = AppState.currentRawPoints;
             if (pts.length === 0) return;
             const lastReal = pts[pts.length - 1];
-
-            // At most three points, and never more than 60 paper pixels ahead: a wild guess would
-            // be worse than no prediction at all.
             const tail = [{ x: lastReal.x, y: lastReal.y }];
-            const maxPred = Math.min(3, predicted.length);
-            for (let i = 0; i < maxPred; i++) {
-                const p = getCanvasPoint(predicted[i]);
-                if (Math.hypot(p.x - lastReal.x, p.y - lastReal.y) > 60) break;
-                tail.push(p);
+            if (predicted.length > 0) {
+                for (let i = 0; i < Math.min(3, predicted.length); i++) {
+                    const p = getCanvasPoint(predicted[i]);
+                    if (Math.hypot(p.x - lastReal.x, p.y - lastReal.y) > 60) break;
+                    tail.push(p);
+                }
+            } else if (pts.length >= 2) {
+                // No browser prediction: extrapolate one short segment from the last real speed.
+                const prev = pts[pts.length - 2];
+                const dx = lastReal.x - prev.x, dy = lastReal.y - prev.y;
+                const dist = Math.hypot(dx, dy);
+                const age = Math.max(0, performance.now() - (typeof lastReal.t === 'number' ? lastReal.t : performance.now()));
+                if (dist > 0.35 && age < 42) {
+                    const lead = Math.max(1.2, Math.min(7, dist * 0.55));
+                    tail.push({ x: lastReal.x + (dx / dist) * lead, y: lastReal.y + (dy / dist) * lead });
+                }
             }
             if (tail.length < 2) return;
 
@@ -4163,11 +4943,15 @@
                 if (p.x > x1) x1 = p.x;
                 if (p.y > y1) y1 = p.y;
             });
-            const pad = (ctxInteraction.lineWidth || 3) + 8;
+            const pad = (liveStrokeWidth || 3) * 0.75 + 8;
             predictionBox = { x: x0 - pad, y: y0 - pad, w: (x1 - x0) + pad * 2, h: (y1 - y0) + pad * 2 };
             trackLiveInk({ x0: predictionBox.x, y0: predictionBox.y, x1: predictionBox.x + predictionBox.w, y1: predictionBox.y + predictionBox.h });
 
             ctxInteraction.save();
+            ctxInteraction.strokeStyle = AppState.activeColor;
+            ctxInteraction.lineWidth = liveStrokeWidth || 1.2;
+            ctxInteraction.lineCap = 'round';
+            ctxInteraction.lineJoin = 'round';
             ctxInteraction.beginPath();
             ctxInteraction.moveTo(tail[0].x, tail[0].y);
             for (let i = 1; i < tail.length; i++) {
@@ -4568,15 +5352,112 @@
             return {
                 x: (e.clientX - cachedCanvasRect.left) / AppState.zoomScale,
                 y: (e.clientY - cachedCanvasRect.top) / AppState.zoomScale,
-                p: e.pressure || 0.5
+                p: e.pressure || 0.5,
+                // The hardware timestamp lets the renderer thin the ink where the nib moved
+                // fast, the way a real pen does. Optional on purpose: old saved strokes have
+                // no `t`, and every consumer has a fallback.
+                t: typeof e.timeStamp === 'number' ? e.timeStamp : performance.now()
             };
         }
+
+        /**
+         * ============================================================================
+         * 4.5 STYLUS WOBBLE FILTER (the "feel")
+         * ============================================================================
+         * Digitizers always return a little high-frequency wobble, and at slow writing
+         * speeds that wobble is a visible wave in a 1.2 px line. A plain moving average
+         * removes it but adds a constant lag, which is the opposite of what a stylus needs.
+         *
+         * This is the speed-adaptive low-pass from the ink modeler architecture: at slow
+         * speeds it filters hard (the hand is nearly still, so lag is invisible), and as the
+         * pen accelerates it opens up until it is following the raw samples almost exactly.
+         * What is left of the lag is covered by the predicted tail.
+         *
+         * The filter state is reset on every pen-down, so a new stroke always starts exactly
+         * under the nib and never inherits the tail of the previous letter.
+         */
+        const penStabilizer = {
+            active: false,
+            x: 0,
+            y: 0,
+            p: 0.5,
+            lastT: 0,
+            reset(pt) {
+                this.active = true;
+                this.x = pt.x;
+                this.y = pt.y;
+                this.p = typeof pt.p === 'number' ? pt.p : 0.5;
+                this.lastT = typeof pt.t === 'number' ? pt.t : performance.now();
+            },
+            push(pt) {
+                if (!this.active) {
+                    this.reset(pt);
+                    return pt;
+                }
+                const t = typeof pt.t === 'number' ? pt.t : performance.now();
+                const dt = Math.max(0.5, t - this.lastT);
+                const dist = Math.hypot(pt.x - this.x, pt.y - this.y);
+                const speed = dist / dt;
+                // 0.38 at a crawl → 1.00 at 1.2 px/ms and above. The old curve only reached
+                // 0.97 at 2.2 px/ms, so even a fast flick kept a small permanent lag — the
+                // exact complaint of the nib trailing the pen. At speed there is no visible
+                // jitter to remove, so from 1.2 px/ms the hardware sample is followed exactly.
+                const alpha = speed >= 1.2
+                    ? 1
+                    : InkBeautifier.clamp(0.38 + 0.62 * (speed / 1.2), 0.38, 1);
+                this.x += (pt.x - this.x) * alpha;
+                this.y += (pt.y - this.y) * alpha;
+                this.p += ((typeof pt.p === 'number' ? pt.p : 0.5) - this.p) * Math.min(1, alpha + 0.1);
+                this.lastT = t;
+                return { x: this.x, y: this.y, p: this.p, t };
+            }
+        };
+
+        /**
+         * ============================================================================
+         * 4.6 DELEGATED INK TRAIL (the OS draws the last few millimetres)
+         * ============================================================================
+         * Chromium exposes `navigator.ink.requestPresenter()`. When the platform supports it
+         * (Windows/Edge and some Chromebooks), the compositor draws the trail directly,
+         * one layer below JavaScript, so the ink appears to come out from under the nib even
+         * when the main thread is busy. It is a progressive enhancement: on a device that
+         * does not implement it every call is a no-op and the canvas preview still works.
+         *
+         * Deliberately pen-only. A delegated trail is opaque; using it for the highlighter
+         * would paint a solid stripe where the user asked for a translucent one.
+         */
+        const delegatedInk = { presenter: null, requested: false };
+        function initDelegatedInkTrail() {
+            if (delegatedInk.requested) return;
+            delegatedInk.requested = true;
+            if (!navigator.ink || typeof navigator.ink.requestPresenter !== 'function') return;
+            navigator.ink.requestPresenter({ presentationArea: canvasInteraction })
+                .then(presenter => { delegatedInk.presenter = presenter; })
+                .catch(() => { delegatedInk.presenter = null; });
+        }
+        function updateDelegatedInkTrail(e) {
+            const presenter = delegatedInk.presenter;
+            if (!presenter || !e) return;
+            if (AppState.activeTool !== 'pen' || AppState.straightLineMode) return;
+            try {
+                presenter.updateInkTrailStartPoint(e, {
+                    color: AppState.activeColor,
+                    // The API is in CSS pixels of the presentation area; CSS `zoom` on the
+                    // paper means the visual width is the paper width times the zoom.
+                    diameter: Math.max(1, AppState.penSize * (AppState.zoomScale || 1))
+                });
+            } catch (_) {}
+        }
+        initDelegatedInkTrail();
 
         /**
          * Reliable Stylus Side-Button (Barrel Button) & Tail Eraser Detector for Windows 10 Tablets
          */
         function isStylusEraserButtonActive(e) {
             if (e.pointerType === 'eraser') return true;
+            // A right-click from a MOUSE must not erase. `buttons & 2` is the right button for
+            // a mouse and the barrel button for a pen, so the whole test is pen-only.
+            if (e.pointerType !== 'pen') return false;
             if (e.button === 5 || e.button === 2) return true;
             if ((e.buttons & 32) === 32 || (e.buttons & 2) === 2) return true;
             if (AppState.hoverBarrelPressed) return true;
@@ -4588,6 +5469,11 @@
                 AppState.lastStylusActivityTime = Date.now();
                 AppState.isTouchPanning = false;
             }
+
+            // Only the primary mouse button draws. Middle/right clicks used to start a stroke
+            // (and the right one erased, because a mouse's right button looks like a pen's
+            // barrel button). A pen is exempt: its barrel button reports button 5 on contact.
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
 
             // PALM REJECTION. A finger or palm landing while the pen is writing must never hijack
             // the stroke: it used to overwrite activePointerId and restart the point list, so the
@@ -4628,6 +5514,9 @@
                 AppState.tempEraserActive = barrelEraserPressed;
                 pushUndoState();
                 AppState.isDrawing = true;
+                pendingErasePath = [];
+                eraseBatchDirty = null;
+                lastEraseAtPoint = { x: pt.x, y: pt.y };
                 eraseAtPoint(pt);
                 drawEraserCursorPreview(pt);
                 return;
@@ -4672,7 +5561,7 @@
                     AppState.transformStartPt = pt;
                     AppState.transformInitialSnapshot = {
                         bounds: { ...AppState.selectionBounds },
-                        strokes: cloneStrokesInto(AppState.strokes),
+                        strokes: snapshotStrokesInto(AppState.strokes),
                         symbols: cloneFlatInto(AppState.symbols),
                         texts: cloneFlatInto(AppState.texts)
                     };
@@ -4691,7 +5580,7 @@
                     AppState.transformStartPt = pt;
                     AppState.transformInitialSnapshot = {
                         bounds: { ...AppState.selectionBounds },
-                        strokes: cloneStrokesInto(AppState.strokes),
+                        strokes: snapshotStrokesInto(AppState.strokes),
                         symbols: cloneFlatInto(AppState.symbols),
                         texts: cloneFlatInto(AppState.texts)
                     };
@@ -4714,8 +5603,12 @@
                 AppState.tempEraserActive = false;
                 AppState.currentRawPoints = [pt];
                 AppState.lastRenderedIndex = 0;
+                // A new stroke starts exactly under the nib; the wobble filter must not carry
+                // the tail of the previous letter into it.
+                penStabilizer.reset(pt);
 
                 const strokeWidth = AppState.activeTool === 'highlighter' ? AppState.highlighterSize : AppState.penSize;
+                liveStrokeWidth = strokeWidth;
                 ctxInteraction.strokeStyle = AppState.activeTool === 'shape' ? AppState.shapeStrokeColor : AppState.activeColor;
                 ctxInteraction.fillStyle = AppState.activeTool === 'shape' ? AppState.shapeStrokeColor : AppState.activeColor;
                 ctxInteraction.lineWidth = strokeWidth;
@@ -4730,6 +5623,7 @@
                     drawIncrementalSegments(0);
                     AppState.lastRenderedIndex = 1;
                 }
+                updateDelegatedInkTrail(e);
             }
         });
 
@@ -4759,6 +5653,9 @@
          * getCoalescedEvents — which still works, but samples the pen noticeably less often.
          * That is the main reason tight Persian loops come out cleaner in Edge.
          */
+        // When raw hover samples are arriving, pointermove is one frame behind them. The
+        // pointermove handler skips its duplicate cursor draw for this long.
+        let lastRawHoverAt = 0;
         canvasInteraction.addEventListener('pointerrawupdate', (e) => {
             if (e.pointerType === 'pen' || e.pointerType === 'eraser') {
                 AppState.lastStylusActivityTime = Date.now();
@@ -4772,17 +5669,35 @@
                         (e.buttons & 2) === 2 ||
                         (e.buttons & 32) === 32
                     );
+                    // Move the writing point on the RAW sample instead of waiting for the
+                    // coalesced pointermove. A hover dot drawn from pointermove is one input
+                    // frame behind the nib, which is exactly the "cursor falls behind on a
+                    // fast move" feeling.
+                    if (AppState.activeTool !== 'lasso') {
+                        const hoverEvents = coalescedEventsOf(e);
+                        const last = hoverEvents[hoverEvents.length - 1] || e;
+                        const hoverPt = getCanvasPoint(last);
+                        lastRawHoverAt = performance.now();
+                        if (AppState.hoverBarrelPressed || AppState.activeTool === 'eraser') {
+                            drawEraserCursorPreview(hoverPt);
+                        } else {
+                            drawPenCursorPreview(hoverPt);
+                        }
+                    }
                 }
                 return;
             }
-            if (e.pointerId !== AppState.activePointerId && e.pointerType !== 'pen' && e.pointerType !== 'eraser') return;
+            // Only the pointer that started the stroke may feed it. The old exception for pen
+            // events let a second stylus (or a pen interrupting a finger stroke) inject points
+            // into someone else's line.
+            if (e.pointerId !== AppState.activePointerId) return;
 
             // Only use raw update for freehand pen/highlighter or eraser
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
                 AppState.usedRawUpdate = true;
                 const events = coalescedEventsOf(e);
                 for (let i = 0; i < events.length; i++) {
-                    eraseAtPoint(getCanvasPoint(events[i]));
+                    queueEraseSample(getCanvasPoint(events[i]));
                 }
                 const lastEv = events[events.length - 1] || e;
                 drawEraserCursorPreview(getCanvasPoint(lastEv));
@@ -4794,13 +5709,16 @@
                 const events = coalescedEventsOf(e);
                 const prevIdx = AppState.currentRawPoints.length;
                 for (let i = 0; i < events.length; i++) {
-                    AppState.currentRawPoints.push(getCanvasPoint(events[i]));
+                    // Every hardware sample goes through the speed-adaptive wobble filter, so
+                    // the line that is drawn is already calm — not a 240 Hz record of jitter.
+                    AppState.currentRawPoints.push(penStabilizer.push(getCanvasPoint(events[i])));
                 }
                 // Wipe the previous guess, draw the real ink, then guess again.
                 clearPredictionTrail();
                 drawIncrementalSegments(prevIdx);
                 AppState.lastRenderedIndex = AppState.currentRawPoints.length;
                 drawPredictedTail(e);
+                updateDelegatedInkTrail(e);
             }
         });
 
@@ -4825,22 +5743,28 @@
                         (e.buttons & 32) === 32
                     );
                 } else {
-                    AppState.hoverBarrelPressed = (e.buttons & 2) === 2;
+                    // A mouse's right button is not an eraser; there is no hover barrel state
+                    // for it to remember.
+                    AppState.hoverBarrelPressed = false;
                 }
 
                 // Draw the writing point ourselves: the native cursor is rendered at the OS
                 // cursor scale, which looks oversized and clumsy on a high-DPI tablet. Each
                 // preview routine clears only its own trail — never the whole page.
                 const wantsEraserRing = AppState.hoverBarrelPressed || AppState.activeTool === 'eraser';
-                if (wantsEraserRing) {
-                    drawEraserCursorPreview(getCanvasPoint(e));
-                } else if (AppState.activeTool !== 'lasso' && AppState.activeTool !== 'pan') {
-                    drawPenCursorPreview(getCanvasPoint(e));
+                // A raw sample already moved the point to the newest hardware position; a
+                // pointermove would only redraw the same ring at an older coordinate.
+                if (performance.now() - lastRawHoverAt > 80) {
+                    if (wantsEraserRing) {
+                        drawEraserCursorPreview(getCanvasPoint(e));
+                    } else if (AppState.activeTool !== 'lasso' && AppState.activeTool !== 'pan') {
+                        drawPenCursorPreview(getCanvasPoint(e));
+                    }
                 }
                 return;
             }
 
-            if (e.pointerId !== AppState.activePointerId && e.pointerType !== 'pen' && e.pointerType !== 'eraser') return;
+            if (e.pointerId !== AppState.activePointerId) return;
             e.preventDefault();
             e.stopPropagation();
 
@@ -4848,6 +5772,9 @@
             if (!AppState.tempEraserActive && (e.pointerType === 'eraser' || (e.buttons & 32) === 32 || (e.buttons & 2) === 2)) {
                 AppState.tempEraserActive = true;
                 AppState.currentRawPoints = [];
+                lastEraseAtPoint = null;
+                pendingErasePath = [];
+                eraseBatchDirty = null;
                 clearLayer(ctxInteraction);
                 pushUndoState();
             }
@@ -4862,7 +5789,7 @@
             // Handle active Eraser (either via Eraser tool OR holding Stylus Barrel Button)
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
                 for (let i = 0; i < events.length; i++) {
-                    eraseAtPoint(getCanvasPoint(events[i]));
+                    queueEraseSample(getCanvasPoint(events[i]));
                 }
                 const lastEv = events[events.length - 1] || e;
                 drawEraserCursorPreview(getCanvasPoint(lastEv));
@@ -4871,15 +5798,19 @@
 
             if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') {
                 const prevIdx = AppState.currentRawPoints.length;
+                const freehand = AppState.activeTool !== 'shape' && !AppState.straightLineMode;
                 for (let i = 0; i < events.length; i++) {
-                    AppState.currentRawPoints.push(getCanvasPoint(events[i]));
+                    const sample = getCanvasPoint(events[i]);
+                    // Shapes need the exact drag endpoints; freehand gets the wobble filter.
+                    AppState.currentRawPoints.push(freehand ? penStabilizer.push(sample) : sample);
                 }
 
-                if (AppState.activeTool !== 'shape' && !AppState.straightLineMode) {
+                if (freehand) {
                     clearPredictionTrail();
                     drawIncrementalSegments(prevIdx);
                     AppState.lastRenderedIndex = AppState.currentRawPoints.length;
                     drawPredictedTail(e);
+                    updateDelegatedInkTrail(e);
                 } else {
                     renderInteractionOverlay();
                 }
@@ -4907,7 +5838,10 @@
         });
         function finishPointerInteraction(e) {
             if (!AppState.isDrawing) return;
-            if (e && e.pointerId !== undefined && AppState.activePointerId !== null && e.pointerId !== AppState.activePointerId && e.pointerType !== 'pen' && e.pointerType !== 'eraser') {
+            // A pointer-up from anything other than the pointer that is drawing must not end
+            // the stroke. This used to exempt pen events, so a stylus touching down for a
+            // moment during a finger/mouse stroke finished that stroke on lift.
+            if (e && e.pointerId !== undefined && AppState.activePointerId !== null && e.pointerId !== AppState.activePointerId) {
                 return;
             }
 
@@ -4924,6 +5858,11 @@
             if (AppState.tempEraserActive || AppState.activeTool === 'eraser') {
                 AppState.tempEraserActive = false;
                 AppState.hoverBarrelPressed = false;
+                // Apply the last frame's queued samples before the authoritative repaint.
+                flushEraseBatch();
+                lastEraseAtPoint = null;
+                pendingErasePath = [];
+                eraseBatchDirty = null;
                 // The erase repaints were coalesced into animation frames while wiping; make sure
                 // the final state is on screen the moment the pen lifts.
                 eraseFlushRepaint();
@@ -4935,6 +5874,17 @@
             // 2. Finish Pen, Highlighter, or Geometric Shape Stroke
             if (AppState.activeTool === 'pen' || AppState.activeTool === 'highlighter' || AppState.activeTool === 'shape') {
                 if (AppState.currentRawPoints.length > 0) {
+                    // The wobble filter is causal, so its newest point trails the nib a little.
+                    // Add the real lift point (the hardware coordinate) so the committed stroke
+                    // ends exactly where the user lifted, not a few milliseconds behind it.
+                    if (e && typeof e.clientX === 'number' && AppState.activeTool !== 'shape') {
+                        const endPt = getCanvasPoint(e);
+                        const last = AppState.currentRawPoints[AppState.currentRawPoints.length - 1];
+                        endPt.p = typeof last.p === 'number' ? last.p : endPt.p;
+                        if (!last || Math.hypot(endPt.x - last.x, endPt.y - last.y) > 0.2) {
+                            AppState.currentRawPoints.push(endPt);
+                        }
+                    }
                     pushUndoState();
                     let finalPts = [];
                     let sharp = false;
@@ -5118,6 +6068,9 @@
         const strokeBoxCache = new WeakMap();
         function invalidateStrokeBox(s) {
             strokeBoxCache.delete(s);
+            // The cached ribbon is built from the old point positions; without this an
+            // in-place move would leave the committed stroke drawn where it used to be.
+            inkPathCache.delete(s);
         }
         function strokeBox(s) {
             let box = strokeBoxCache.get(s);
@@ -5322,10 +6275,164 @@
             return { x0: box.x0 - pad, y0: box.y0 - pad, x1: box.x1 + pad, y1: box.y1 + pad, empty: false };
         }
 
-        function eraseAtPoint(pt) {
+        /**
+         * Digital pens report 120-240 positions a second; the screen repaints 60-120 times a
+         * second and the eraser's region repaint is already coalesced to one frame. Running the
+         * O(strokes) hit-test on every raw sample was therefore pure duplicated work, and on a
+         * page with thousands of strokes it was the eraser's main cost.
+         *
+         * Samples are collected into the frame that will be painted. Between the last processed
+         * point and the newest one the eraser is treated as a swept disc: intermediate points
+         * are inserted at most half a radius apart, so a fast swipe cannot skip a stroke. The
+         * whole batch updates the vector data once and asks for one region repaint.
+         */
+        let lastEraseAtPoint = null;
+        let pendingErasePath = [];
+        let eraseBatchQueued = false;
+        let eraseBatchDirty = null;
+
+        function queueEraseSample(pt) {
+            pendingErasePath.push(pt);
+            if (eraseBatchQueued) return;
+            eraseBatchQueued = true;
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(runEraseBatch);
+            } else {
+                setTimeout(runEraseBatch, 0);
+            }
+        }
+
+        function runEraseBatch() {
+            eraseBatchQueued = false;
+            if (pendingErasePath.length === 0) return;
+            const path = pendingErasePath;
+            pendingErasePath = [];
+            // Build the whole frame's swept path first, then hit-test every stroke ONCE.
+            // The old loop called eraseAtPoint() per interpolated point, and each call walked
+            // (and rebuilt) the entire stroke list. On a page with a few thousand strokes
+            // that made one fast wipe cost more than a hundred milliseconds.
+            const batch = [];
+            let from = lastEraseAtPoint;
+            for (let k = 0; k < path.length; k++) {
+                const to = path[k];
+                if (!from) {
+                    batch.push(to);
+                } else {
+                    const dx = to.x - from.x;
+                    const dy = to.y - from.y;
+                    const dist = Math.hypot(dx, dy);
+                    // A sample inside the previous disc is already covered. Testing it again
+                    // cannot erase anything new; on a 240 Hz pen this is most of the samples.
+                    if (dist < ERASER_RADIUS * 0.35) continue;
+                    // Half a radius keeps the interpolated discs overlapping, so a fast swipe
+                    // cannot leave a gap between the processed positions.
+                    const step = Math.max(1.5, ERASER_RADIUS * 0.5);
+                    const steps = Math.max(1, Math.ceil(dist / step));
+                    for (let i = 1; i <= steps; i++) {
+                        batch.push({
+                            x: from.x + (dx * i) / steps,
+                            y: from.y + (dy * i) / steps
+                        });
+                    }
+                }
+                from = to;
+            }
+            lastEraseAtPoint = from;
+            if (batch.length > 0) erasePointsBatch(batch, true);
+            if (eraseBatchDirty) {
+                const dirty = eraseBatchDirty;
+                eraseBatchDirty = null;
+                // We are already inside the frame that will paint the eraser, so repaint now
+                // instead of asking for another animation frame (which added a visible frame
+                // of lag to every wipe).
+                try {
+                    repaintInkRegion(dirty);
+                } catch (err) {
+                    console.error('Erase repaint failed:', err);
+                    renderAllLayers();
+                }
+            }
+        }
+
+        /** Used on pen-up, before the authoritative full repaint. */
+        function flushEraseBatch() {
+            eraseBatchQueued = false;
+            if (pendingErasePath.length > 0) runEraseBatch();
+        }
+
+        // One grid cell per ~two eraser diameters. A sample only has to be compared with the
+        // stroke points whose cell is near it, instead of every point in the document.
+        const ERASE_GRID_CELL = 24;
+
+        function buildEraseGrid(samples) {
+            const grid = new Map();
+            for (let i = 0; i < samples.length; i++) {
+                const p = samples[i];
+                const key = Math.floor(p.x / ERASE_GRID_CELL) + ':' + Math.floor(p.y / ERASE_GRID_CELL);
+                let bucket = grid.get(key);
+                if (!bucket) {
+                    bucket = [];
+                    grid.set(key, bucket);
+                }
+                bucket.push(p);
+            }
+            return grid;
+        }
+
+        /**
+         * Samples whose cell overlaps a stroke's box grown by `pad`. With a swept eraser a
+         * stroke can only be hit by a sample whose CENTRE is inside that grown box, so this is
+         * an exact filter, not an approximation.
+         */
+        function eraseSamplesNearBox(grid, box, pad) {
+            const cell = ERASE_GRID_CELL;
+            const cx0 = Math.floor((box.x0 - pad) / cell);
+            const cy0 = Math.floor((box.y0 - pad) / cell);
+            const cx1 = Math.floor((box.x1 + pad) / cell);
+            const cy1 = Math.floor((box.y1 + pad) / cell);
+            const out = [];
+            for (let cx = cx0; cx <= cx1; cx++) {
+                for (let cy = cy0; cy <= cy1; cy++) {
+                    const bucket = grid.get(cx + ':' + cy);
+                    if (!bucket) continue;
+                    for (let i = 0; i < bucket.length; i++) out.push(bucket[i]);
+                }
+            }
+            return out;
+        }
+
+        /**
+         * One pass over the document for a whole frame of eraser samples. This is the hot path:
+         * the old version rebuilt the stroke list once per interpolated point, which is why a
+         * fast wipe on a dense page felt like it was dragging a weight.
+         */
+        function erasePointsBatch(samples, deferRepaint = false) {
+            if (!samples || samples.length === 0) return;
             const eraserRadius = ERASER_RADIUS;
+            const grid = buildEraseGrid(samples);
+            const strokeMode = AppState.eraserMode === 'stroke';
+            // A batch is usually a short piece of one swipe. Reject every stroke whose box is
+            // nowhere near that piece with four comparisons, before touching the sample grid.
+            let pathX0 = Infinity, pathY0 = Infinity, pathX1 = -Infinity, pathY1 = -Infinity;
+            for (let i = 0; i < samples.length; i++) {
+                const p = samples[i];
+                if (p.x < pathX0) pathX0 = p.x;
+                if (p.y < pathY0) pathY0 = p.y;
+                if (p.x > pathX1) pathX1 = p.x;
+                if (p.y > pathY1) pathY1 = p.y;
+            }
+            let maxHalf = 0;
+            for (const s of AppState.strokes) {
+                const half = (s.size || 3) / 2;
+                if (half > maxHalf) maxHalf = half;
+            }
+            const sweepPad = eraserRadius + maxHalf + 1;
+            const boxNearPath = (box) => !(
+                box.x1 < pathX0 - sweepPad || box.x0 > pathX1 + sweepPad ||
+                box.y1 < pathY0 - sweepPad || box.y0 > pathY1 + sweepPad
+            );
             let changed = false;
-            // Union (paper units) of everything this sample removed or changed. Optional: the
+            // Union (paper units) of everything this batch removed or changed. Optional: the
             // repaint takes the cheap region path only when it knows exactly what moved.
             let dirty = null;
             const addDirtyBox = (b) => { dirty = unionBox(dirty, b); };
@@ -5336,40 +6443,79 @@
             // stroke on screen until the pen was lifted.
             const addDirtyStroke = (s) => addDirtyBox(inflateBox(strokeBox(s), (s.size || 3) / 2 + 2));
 
-            if (AppState.eraserMode === 'stroke') {
-                const beforeCount = AppState.strokes.length;
-                AppState.strokes = AppState.strokes.filter(s => {
-                    if (!strokeNearPoint(s, pt, eraserRadius)) return true;
-                    const hitThresh = eraserRadius + (s.size || 3) / 2;
-                    if (s.points.length === 1) {
-                        if (Math.hypot(pt.x - s.points[0].x, pt.y - s.points[0].y) > hitThresh) return true;
-                        addDirtyStroke(s);
-                        return false;
-                    }
-                    for (let i = 0; i < s.points.length - 1; i++) {
-                        if (distToSegment(pt, s.points[i], s.points[i + 1]) <= hitThresh) {
-                            addDirtyStroke(s);
-                            return false;
-                        }
-                    }
-                    return true;
-                });
-                if (AppState.strokes.length !== beforeCount) changed = true;
-            } else {
-                // Partial Eraser: Splits vector strokes cleanly at the erased points
+            if (strokeMode) {
                 const nextStrokes = [];
                 for (const s of AppState.strokes) {
-                    if (!strokeNearPoint(s, pt, eraserRadius)) {
+                    const box = strokeBox(s);
+                    if (box.empty || !boxNearPath(box)) {
                         nextStrokes.push(s);
                         continue;
                     }
                     const hitThresh = eraserRadius + (s.size || 3) / 2;
+                    const near = eraseSamplesNearBox(grid, box, hitThresh);
+                    let hit = false;
+                    if (near.length) {
+                        if (s.points.length === 1) {
+                            const p0 = s.points[0];
+                            for (let i = 0; i < near.length; i++) {
+                                if (Math.hypot(near[i].x - p0.x, near[i].y - p0.y) <= hitThresh) {
+                                    hit = true;
+                                    break;
+                                }
+                            }
+                        } else {
+                            // Find any segment of this stroke that a sample disc touches.
+                            for (let n = 0; n < near.length && !hit; n++) {
+                                const sample = near[n];
+                                for (let i = 0; i < s.points.length - 1; i++) {
+                                    if (distToSegment(sample, s.points[i], s.points[i + 1]) <= hitThresh) {
+                                        hit = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (hit) {
+                        addDirtyStroke(s);
+                        changed = true;
+                    } else {
+                        nextStrokes.push(s);
+                    }
+                }
+                if (changed) AppState.strokes = nextStrokes;
+            } else {
+                // Partial eraser: split every touched stroke once, against all samples in the
+                // frame. Points are immutable, so untouched strokes keep their point arrays.
+                const nextStrokes = [];
+                for (const s of AppState.strokes) {
+                    const box = strokeBox(s);
+                    if (box.empty || !boxNearPath(box)) {
+                        nextStrokes.push(s);
+                        continue;
+                    }
+                    const hitThresh = eraserRadius + (s.size || 3) / 2;
+                    const near = eraseSamplesNearBox(grid, box, hitThresh);
+                    if (near.length === 0) {
+                        nextStrokes.push(s);
+                        continue;
+                    }
+                    const hitThreshSq = hitThresh * hitThresh;
                     let currentChunk = [];
                     let strokeModified = false;
 
                     for (let i = 0; i < s.points.length; i++) {
                         const p = s.points[i];
-                        if (Math.hypot(pt.x - p.x, pt.y - p.y) <= hitThresh) {
+                        let erased = false;
+                        for (let n = 0; n < near.length; n++) {
+                            const dx = near[n].x - p.x;
+                            const dy = near[n].y - p.y;
+                            if (dx * dx + dy * dy <= hitThreshSq) {
+                                erased = true;
+                                break;
+                            }
+                        }
+                        if (erased) {
                             strokeModified = true;
                             if (currentChunk.length >= 2) {
                                 nextStrokes.push({ ...s, id: uid(), points: currentChunk });
@@ -5394,12 +6540,16 @@
                 if (changed) AppState.strokes = nextStrokes;
             }
 
-            // Also check symbols
+            // Also check symbols. They are few, so a direct loop over the frame's samples is
+            // cheaper than another grid query.
             const symBefore = AppState.symbols.length;
             AppState.symbols = AppState.symbols.filter(sym => {
-                if (Math.hypot(pt.x - sym.x, pt.y - sym.y) <= eraserRadius + (sym.size || 24) / 2) {
-                    addDirtyBox(symbolBox(sym));
-                    return false;
+                const hitThresh = eraserRadius + (sym.size || 24) / 2;
+                for (let i = 0; i < samples.length; i++) {
+                    if (Math.hypot(samples[i].x - sym.x, samples[i].y - sym.y) <= hitThresh) {
+                        addDirtyBox(symbolBox(sym));
+                        return false;
+                    }
                 }
                 return true;
             });
@@ -5408,9 +6558,18 @@
             if (changed) {
                 // The eraser's own footprint always joins the dirty box, so a partial erase that
                 // split a stroke can never leave the two halves drawn at once.
-                addDirtyDisc(pt, eraserRadius + 24);
-                requestEraseRepaint(dirty);
+                for (let i = 0; i < samples.length; i++) addDirtyDisc(samples[i], eraserRadius + 24);
+                if (deferRepaint) {
+                    eraseBatchDirty = unionBox(eraseBatchDirty, dirty);
+                } else {
+                    requestEraseRepaint(dirty);
+                }
             }
+        }
+
+        /** Single-sample entry point, kept for pointer-down and direct calls. */
+        function eraseAtPoint(pt, deferRepaint = false) {
+            erasePointsBatch([pt], deferRepaint);
         }
 
         /**
@@ -5480,8 +6639,15 @@
                 });
                 AppState.texts = snap.texts.map(t => {
                     if (!AppState.selectedIds.has(t.id)) return t;
+                    // The text box must orbit the selection centre together with the ink and
+                    // symbols. Rotating only the glyphs left a group of text boxes standing
+                    // still while the rest of the selection turned around them.
+                    const rx = t.x - b0.cx;
+                    const ry = t.y - b0.cy;
                     return {
                         ...t,
+                        x: b0.cx + rx * cos - ry * sin,
+                        y: b0.cy + rx * sin + ry * cos,
                         rotation: (t.rotation || 0) + dTheta
                     };
                 });
@@ -5663,7 +6829,9 @@
                         item.text = val;
                         item.fontSize = AppState.textDraftSize;
                         item.bold = AppState.textDraftBold;
-                        item.color = AppState.activeColor;
+                        // Editing text must not silently recolor it with whatever pen colour is
+                        // currently selected; the popover has no colour control. Recolor only
+                        // through the lasso swatches, where the user asks for it.
                     }
                 } else {
                     AppState.texts.push({
@@ -7361,7 +8529,7 @@
             const v = parseInt(e.target.value, 10);
             AppState.streamlineIntensity = v;
             document.getElementById('slider-streamline-val').textContent = v === 0
-                ? '۰٪ (خام و طبیعی)'
+                ? '۰٪ (طبیعی)'
                 : `${toPersianDigits(v)}٪`;
         });
 
@@ -7446,9 +8614,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 18,
-            date: '2026-10-20',
-            features: 'the live layer is wiped by rectangle, not by page'
+            version: 22,
+            date: '2026-10-22',
+            features: 'proportional paper zoom + fit-width button + final-only ink quality pass'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
@@ -7539,12 +8707,32 @@
         document.getElementById('input-pdf-upload').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            const oldData = AppState.pdfDataBase64;
+            const oldPage = AppState.pdfPageNum;
             const reader = new FileReader();
             reader.onload = async (ev) => {
-                AppState.pdfDataBase64 = ev.target.result;
-                AppState.pdfPageNum = 1;
-                await loadPdfFromBase64(AppState.pdfDataBase64, 1);
-                scheduleSavePage();
+                const candidate = ev.target.result;
+                const ok = await loadPdfFromBase64(candidate, 1);
+                if (ok === true) {
+                    // Only remember a file that actually opened. The old code saved the base64
+                    // even when PDF.js rejected it, so a bad pick replaced a working document
+                    // on this page and came back broken after a reload.
+                    AppState.pdfDataBase64 = candidate;
+                    AppState.pdfPageNum = 1;
+                    scheduleSavePage();
+                } else if (ok === false) {
+                    AppState.pdfDataBase64 = oldData;
+                    if (oldData) {
+                        await loadPdfFromBase64(oldData, oldPage);
+                    }
+                }
+                // ok === null means a newer pick superseded this one; touch nothing.
+                // Allow choosing the same file again after a failed attempt.
+                e.target.value = '';
+            };
+            reader.onerror = () => {
+                console.error('PDF file could not be read:', reader.error);
+                e.target.value = '';
             };
             reader.readAsDataURL(file);
         });
@@ -7649,6 +8837,7 @@
             updatePaperEmptyHint();
 
             await loadPdfFromBase64(AppState.pdfDataBase64, AppState.pdfPageNum);
+            if (token !== dayLoadToken) return;
             renderMindMapDOMNodes();
             renderAllLayers();
         }
@@ -7766,12 +8955,16 @@
             // app, and a snapshot may have been taken since the modal was last opened).
             renderSnapshotList();
             updateBackupUI();
+            updateFastMirrorUI();
         });
         document.getElementById('btn-close-sync').addEventListener('click', () => {
             document.getElementById('modal-sync').classList.add('hidden');
         });
 
         document.getElementById('btn-backup-export').addEventListener('click', async () => {
+            // Exporting is the copy the user takes away; it must contain the newest stroke,
+            // not the version from before the 180 ms autosave debounce.
+            await flushPendingSave();
             const allData = await dbEngine.exportAllPages();
             const blob = new Blob([JSON.stringify(allData)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -7782,6 +8975,50 @@
             URL.revokeObjectURL(url);
         });
 
+        /**
+         * Accept every shape a Salname backup has ever been written in:
+         *   - the manual export:            [ page, page, ... ]
+         *   - a folder backup:              { app, build, savedAt, pages: [...] }
+         *   - an append-only journal line:  { dateKey, page } (one JSON object per line)
+         * The old importer only understood the first one, so a perfectly good
+         * Salnameh_Latest.json from the backup folder was rejected as invalid.
+         */
+        function parseBackupPages(text) {
+            const raw = String(text || '').trim();
+            if (!raw) return [];
+            const addPage = (map, page) => {
+                if (page && page.dateKey) map.set(page.dateKey, page);
+            };
+            try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed.filter(p => p && p.dateKey);
+                if (parsed && Array.isArray(parsed.pages)) return parsed.pages.filter(p => p && p.dateKey);
+                if (parsed && parsed.page && parsed.page.dateKey) return [parsed.page];
+                if (parsed && parsed.dateKey) return [parsed];
+                return [];
+            } catch (_) {
+                // Not a single JSON document: try the line-oriented journal.
+            }
+            const byKey = new Map();
+            raw.split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                if (!trimmed) return;
+                try {
+                    const entry = JSON.parse(trimmed);
+                    if (Array.isArray(entry)) {
+                        entry.forEach(page => addPage(byKey, page));
+                    } else if (entry && Array.isArray(entry.pages)) {
+                        entry.pages.forEach(page => addPage(byKey, page));
+                    } else if (entry && entry.page && entry.page.dateKey) {
+                        addPage(byKey, entry.page);
+                    } else {
+                        addPage(byKey, entry);
+                    }
+                } catch (_) {}
+            });
+            return Array.from(byKey.values());
+        }
+
         document.getElementById('btn-backup-import').addEventListener('click', () => {
             document.getElementById('input-backup-import').click();
         });
@@ -7791,21 +9028,26 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = async (ev) => {
+                const msg = document.getElementById('sync-status-msg');
                 try {
-                    const parsed = JSON.parse(ev.target.result);
-                    if (Array.isArray(parsed)) {
-                        // The file about to be imported replaces the planner. Keep what is here
-                        // now, so a wrong file (an old day, someone else's export) is undoable.
-                        await takeSnapshot('پیش از بارگذاری فایل', true);
-                        await dbEngine.importAllPages(parsed);
-                        await loadGeminiKeyFromDB();
-                        await loadDayPage(AppState.currentDateKey);
-                        const msg = document.getElementById('sync-status-msg');
-                        msg.textContent = '✓ تمام اطلاعات سالنامه با موفقیت بازیابی و همگام‌سازی شد!';
-                        msg.classList.remove('hidden');
+                    const pages = parseBackupPages(ev.target.result);
+                    if (pages.length === 0) {
+                        throw new Error('Backup file contains no pages');
                     }
+                    // The imported file replaces the planner. Flush first, so the recovery copy
+                    // taken below contains the page exactly as the user last saw it.
+                    await flushPendingSave();
+                    await takeSnapshot('پیش از بارگذاری فایل', true);
+                    await dbEngine.importAllPages(pages);
+                    await loadGeminiKeyFromDB();
+                    await loadDayPage(AppState.currentDateKey);
+                    fastMirror.rebuildFromDB();
+                    msg.textContent = '✓ تمام اطلاعات سالنامه با موفقیت بازیابی و همگام‌سازی شد!';
+                    msg.classList.remove('hidden');
                 } catch (err) {
                     console.error('Import error:', err);
+                    msg.textContent = '× این فایل پشتیبان معتبر نیست؛ هیچ داده‌ای تغییر نکرد.';
+                    msg.classList.remove('hidden');
                 }
             };
             reader.readAsText(file);
@@ -7857,6 +9099,10 @@
          */
         async function takeSnapshot(label, force = false) {
             try {
+                // A snapshot is also taken from buttons (before an import, before a restore,
+                // "handy copy now"). A debounced stroke may still be sitting in memory; flush it
+                // first or the copy would be missing exactly the work the user is protecting.
+                await flushPendingSave();
                 const pages = backupSafePages(await dbEngine.exportAllPages());
                 if (pages.length === 0) return null;
                 const hash = hashText(JSON.stringify(pages));
@@ -7907,6 +9153,14 @@
                     backupFolderState = 'needs-permission';
                     updateBackupUI();
                     return false;
+                }
+                // A manual "back up now" must include the last stroke, which may still be in
+                // the 180 ms save debounce. Automatic runs happen right after a committed save.
+                if (force) {
+                    await flushPendingSave();
+                    // The user is leaving; don't leave the just-saved page waiting for an idle
+                    // timer that the browser may throttle in the background.
+                    fastMirror.flush().catch(() => {});
                 }
                 const pages = backupSafePages(await dbEngine.exportAllPages());
                 if (pages.length === 0) return false;
@@ -8036,6 +9290,102 @@
             }
         }
 
+        function formatMirrorBytes(bytes) {
+            if (!bytes) return '۰';
+            if (bytes < 1024 * 1024) return `${toPersianDigits(Math.max(1, Math.round(bytes / 1024)))} کیلوبایت`;
+            return `${toPersianDigits((bytes / (1024 * 1024)).toFixed(1))} مگابایت`;
+        }
+
+        async function updateFastMirrorUI() {
+            const badge = document.getElementById('fast-mirror-status');
+            const toggle = document.getElementById('fast-mirror-toggle');
+            const restoreBtn = document.getElementById('btn-fast-mirror-restore');
+            const clearBtn = document.getElementById('btn-fast-mirror-clear');
+            if (!badge) return;
+            if (!fastMirror.supported) {
+                badge.textContent = 'این مرورگر پشتیبانی نمی‌کند';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-500 font-bold';
+                if (toggle) { toggle.checked = false; toggle.disabled = true; }
+                if (restoreBtn) restoreBtn.disabled = true;
+                if (clearBtn) clearBtn.disabled = true;
+                return;
+            }
+            if (toggle) { toggle.disabled = false; toggle.checked = fastMirror.enabled; }
+            if (restoreBtn) restoreBtn.disabled = !fastMirror.enabled;
+            if (clearBtn) clearBtn.disabled = false;
+            if (!fastMirror.enabled) {
+                badge.textContent = 'غیرفعال';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-500 font-bold';
+                return;
+            }
+            if (fastMirror.lastError) {
+                badge.textContent = 'خطا در نوشتن روی دیسک';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold';
+                return;
+            }
+            const info = await fastMirror.summary();
+            if (!info.count) {
+                badge.textContent = 'آماده — هنوز صفحه‌ای نوشته نشده';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold';
+            } else {
+                badge.textContent = `✓ ${toPersianDigits(info.count)} روز · ${formatMirrorBytes(info.bytes)}`;
+                badge.className = 'text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold';
+            }
+        }
+
+        async function restoreFromFastMirror() {
+            const msg = document.getElementById('fast-mirror-msg');
+            if (!fastMirror.supported) return;
+            try {
+                const pages = await fastMirror.readAllPages();
+                if (pages.length === 0) {
+                    if (msg) {
+                        msg.textContent = 'نسخهٔ سریع هنوز صفحه‌ای ندارد.';
+                        msg.className = 'mt-2 text-[11px] font-medium text-amber-700';
+                    }
+                    return;
+                }
+                if (!confirm(`نسخهٔ سریع ${toPersianDigits(pages.length)} روز را روی سالنامه بازگردانی کنیم؟ وضعیت فعلی هم به‌عنوان یک نسخه ذخیره می‌شود.`)) return;
+                await flushPendingSave();
+                await takeSnapshot('پیش از بازیابی نسخهٔ سریع', true);
+                // The mirror deliberately leaves the PDF out. Keep the one already in
+                // IndexedDB so restoring the handwriting cannot also blank the textbook.
+                const existing = new Map();
+                try {
+                    (await dbEngine.exportAllPages()).forEach(p => {
+                        if (p && p.dateKey) existing.set(p.dateKey, p);
+                    });
+                } catch (_) {}
+                const restoredPages = pages.map(page => {
+                    const old = existing.get(page.dateKey);
+                    if (!old) return page;
+                    return {
+                        ...old,
+                        ...page,
+                        // IndexedDB's PDF is the current one; the mirror's copy (if any, from
+                        // an older build) is only a fallback when the database lost it.
+                        pdfDataBase64: old.pdfDataBase64 || page.pdfDataBase64 || null,
+                        pdfPageNum: page.pdfPageNum != null ? page.pdfPageNum : (old.pdfPageNum || 1)
+                    };
+                });
+                await dbEngine.importAllPages(restoredPages);
+                await loadGeminiKeyFromDB();
+                await loadDayPage(AppState.currentDateKey);
+                fastMirror.rebuildFromDB();
+                if (msg) {
+                    msg.textContent = `✓ ${toPersianDigits(pages.length)} روز از نسخهٔ سریع بازگردانده شد.`;
+                    msg.className = 'mt-2 text-[11px] font-medium text-emerald-600';
+                }
+                await updateFastMirrorUI();
+            } catch (err) {
+                console.error('Fast mirror restore failed:', err);
+                if (msg) {
+                    msg.textContent = 'بازگردانی از نسخهٔ سریع انجام نشد.';
+                    msg.className = 'mt-2 text-[11px] font-medium text-red-600';
+                }
+            }
+        }
+
         async function renderSnapshotList() {
             const list = document.getElementById('snapshot-list');
             if (!list) return;
@@ -8074,6 +9424,7 @@
                 await dbEngine.importAllPages(snap.pages);
                 await loadGeminiKeyFromDB();
                 await loadDayPage(AppState.currentDateKey);
+                fastMirror.rebuildFromDB();
                 renderSnapshotList();
                 setBackupStatus('✓ سالنامه به نسخه ' + formatBackupTime(snap.at) + ' بازگردانده شد.', false);
             } catch (err) {
@@ -8084,6 +9435,42 @@
 
         document.getElementById('btn-backup-folder').addEventListener('click', () => { chooseBackupFolder(); });
         document.getElementById('btn-backup-grant').addEventListener('click', () => { requestBackupFolderPermission(); });
+
+        document.getElementById('fast-mirror-toggle').addEventListener('change', async (e) => {
+            fastMirror.enabled = !!e.target.checked;
+            try {
+                localStorage.setItem('salname_fast_mirror', fastMirror.enabled ? 'on' : 'off');
+            } catch (_) {}
+            if (fastMirror.enabled) {
+                await flushPendingSave();
+                fastMirror.schedule(AppState.currentDateKey, buildPagePayload(AppState.currentDateKey));
+                await fastMirror.rebuildFromDB();
+            } else {
+                fastMirror.pending.clear();
+                if (fastMirror.timer) clearTimeout(fastMirror.timer);
+                fastMirror.timer = null;
+                fastMirror.firstPendingAt = 0;
+            }
+            const msg = document.getElementById('fast-mirror-msg');
+            if (msg) {
+                msg.textContent = fastMirror.enabled
+                    ? '✓ نسخهٔ سریع فعال شد؛ صفحات در پس‌زمینه روی دیسک نوشته می‌شوند.'
+                    : 'نسخهٔ سریع غیرفعال شد؛ نسخه‌های موجود پاک نشدند.';
+                msg.className = 'mt-2 text-[11px] font-medium ' + (fastMirror.enabled ? 'text-emerald-600' : 'text-slate-500');
+            }
+            await updateFastMirrorUI();
+        });
+        document.getElementById('btn-fast-mirror-restore').addEventListener('click', () => { restoreFromFastMirror(); });
+        document.getElementById('btn-fast-mirror-clear').addEventListener('click', async () => {
+            const msg = document.getElementById('fast-mirror-msg');
+            if (!confirm('نسخهٔ سریع روی دیسک پاک شود؟ نسخهٔ اصلی در IndexedDB و پوشهٔ پشتیبان دست نمی‌خورد.')) return;
+            await fastMirror.clearAll();
+            if (msg) {
+                msg.textContent = 'نسخهٔ سریع پاک شد. بعد از ذخیرهٔ بعدی دوباره ساخته می‌شود.';
+                msg.className = 'mt-2 text-[11px] font-medium text-slate-500';
+            }
+            await updateFastMirrorUI();
+        });
         document.getElementById('btn-backup-now').addEventListener('click', async () => {
             const ok = await writeFolderBackup(true);
             setBackupStatus(ok ? '✓ پشتیبان گرفته شد.' : 'پشتیبان‌گیری انجام نشد (اجازه یا پوشه را بررسی کن).', !ok);
@@ -8109,15 +9496,22 @@
          * `pagehide` is kept as a last-resort flush for a desktop tab that is closed.
          */
         function handleLeavingApp() {
-            flushPendingSave();
             // Forced: the regular throttle exists to avoid writing the whole planner on every
             // stroke, not to skip the copy that happens when the user walks away.
             if (backupFolderState === 'ready') writeFolderBackup(true);
+            // The fast mirror is idle-scheduled during normal use; when the app is leaving,
+            // give it the just-flushed page immediately instead of waiting for a timer that
+            // may never fire in the background.
+            flushPendingSave()
+                .then(() => fastMirror.flush())
+                .catch(() => {});
         }
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') handleLeavingApp();
         });
-        window.addEventListener('pagehide', () => { flushPendingSave(); });
+        window.addEventListener('pagehide', () => {
+            flushPendingSave().then(() => fastMirror.flush()).catch(() => {});
+        });
 
         // High-Quality Full Page PNG Export
         document.getElementById('btn-export').addEventListener('click', () => {

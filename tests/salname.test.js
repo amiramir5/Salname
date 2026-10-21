@@ -67,7 +67,9 @@ const FN_NAMES = [
     'groupStrokesIntoBlocks',
     'assignHandwritingParents',
     'cloneStrokesInto',
+    'snapshotStrokesInto',
     'cloneFlatInto',
+    'parseBackupPages',
     'unionBox',
     'inflateBox',
     'boxIntersects'
@@ -83,7 +85,9 @@ const {
     groupStrokesIntoBlocks,
     assignHandwritingParents,
     cloneStrokesInto,
+    snapshotStrokesInto,
     cloneFlatInto,
+    parseBackupPages,
     unionBox,
     inflateBox,
     boxIntersects
@@ -748,6 +752,41 @@ ok('a restore keeps the current state as a copy first',
 ok('loading a backup file keeps the current state as a copy first',
     /takeSnapshot\('پیش از بارگذاری فایل', true\)/.test(html));
 
+// The importer must understand every shape the app itself writes: the manual export is an
+// array, the folder backup is {pages:[...]}, and the on-disk journal is one JSON object per line.
+const manualBackup = [{ dateKey: '1405-07-01', strokes: [] }];
+check('the manual array export imports',
+    parseBackupPages(JSON.stringify(manualBackup)), manualBackup);
+check('the {pages:[...]} folder backup imports',
+    parseBackupPages(JSON.stringify({ app: 'Salnameh', pages: manualBackup })), manualBackup);
+check('a JSON-lines journal keeps the newest page for each day',
+    parseBackupPages([
+        JSON.stringify({ dateKey: '1405-07-01', page: { dateKey: '1405-07-01', strokes: [{ id: 'old' }] } }),
+        JSON.stringify({ dateKey: '1405-07-01', page: { dateKey: '1405-07-01', strokes: [{ id: 'new' }] } }),
+        JSON.stringify({ dateKey: '1405-07-02', page: { dateKey: '1405-07-02', strokes: [{ id: 'two' }] } })
+    ].join('\n')),
+    [{ dateKey: '1405-07-01', strokes: [{ id: 'new' }] }, { dateKey: '1405-07-02', strokes: [{ id: 'two' }] }]);
+check('an invalid backup has no pages', parseBackupPages('not json at all'), []);
+
+ok('the fast mirror writes real files in the browser file system, not another database',
+    html.includes('navigator.storage.getDirectory') &&
+    html.includes("const FAST_MIRROR_DIR = 'fast-pages'"));
+ok('the mirror payload is captured before the awaited save, then queued and never awaited',
+    /const mirrorPayload = buildPagePayload\(dateKey\);[\s\S]{0,300}await dbEngine\.savePage\(buildPagePayload\(dateKey\)\)[\s\S]{0,700}fastMirror\.schedule\(dateKey, mirrorPayload\);/.test(html) &&
+    !/await fastMirror\.schedule/.test(html));
+ok('the mirror waits for a quiet pen and skips a stroke that starts meanwhile',
+    html.includes('FAST_MIRROR_QUIET_MS') &&
+    /AppState\.isDrawing[\s\S]{0,90}setTimeout\(run, 400\)/.test(html));
+ok('the fast copy can be enabled, restored and cleared',
+    html.includes('id="fast-mirror-toggle"') &&
+    html.includes('function restoreFromFastMirror') &&
+    html.includes('fastMirror.clearAll()'));
+ok('the mirror leaves the big PDF in IndexedDB instead of stringifying it on every save',
+    /lightPage\(page\)[\s\S]{0,500}delete light\.pdfDataBase64/.test(html) &&
+    /this\.pending\.set\(dateKey, this\.lightPage\(page\)\)/.test(html));
+ok('restoring the fast copy keeps the PDF that is still in IndexedDB',
+    /pdfDataBase64: old\.pdfDataBase64 \|\| page\.pdfDataBase64 \|\| null/.test(html));
+
 // A file in a folder the user picks is the only copy that survives the device dying, and it
 // needs no network at all — which is why it, and not a cloud service, is the second layer.
 ok('the folder backup writes a plain JSON file with no network',
@@ -882,6 +921,16 @@ ok('...with its own stroke and point objects',
     strokeCopy[0].points[0] !== srcStrokes[0].points[0]);
 strokeCopy[0].points[0].x = 999;
 check('...so editing a copy never rewrites the original', srcStrokes[0].points[0].x, 1);
+
+// The hot undo path deliberately does NOT copy points: they are immutable by contract, and
+// copying tens of thousands of them at every eraser touch was the freeze. The stroke object is
+// still copied, so colour/size changes cannot rewrite history.
+const hotSnapshot = snapshotStrokesInto(srcStrokes);
+ok('the undo snapshot copies the stroke but shares its immutable point array',
+    hotSnapshot[0] !== srcStrokes[0] && hotSnapshot[0].points === srcStrokes[0].points);
+hotSnapshot[0].size = 99;
+check('...and a later size/colour edit does not rewrite the snapshot', srcStrokes[0].size, 4);
+
 const srcNodes = [{ id: 'n1', text: 'ریاضی' }];
 const nodeCopy = cloneFlatInto(srcNodes);
 ok('the flat copy is a new array of new items', nodeCopy !== srcNodes && nodeCopy[0] !== srcNodes[0]);
@@ -903,7 +952,7 @@ ok('a stroke edited in place can drop its cached bounding box',
 check('...and both in-place editors do drop it',
     (html.match(/invalidateStrokeBox\(/g) || []).length, 3);
 ok('the erased stroke and symbol boxes are the only way the region grows',
-    html.includes('const addDirtyStroke = (s) =>') && html.includes('addDirtyDisc(pt, eraserRadius + 24)'));
+    html.includes('const addDirtyStroke = (s) =>') && html.includes('addDirtyDisc(samples[i], eraserRadius + 24)'));
 ok('the gesture accumulates one dirty box out of every sample',
     html.includes('eraseDirtyBox = unionBox(eraseDirtyBox, box);'));
 ok('the erase reports the box it changed', html.includes('requestEraseRepaint(dirty);'));
@@ -940,6 +989,25 @@ ok('the quality choice survives a reload',
     /localStorage\.setItem\(PEN_QUALITY_KEY/.test(html) &&
     /localStorage\.getItem\(PEN_QUALITY_KEY\)/.test(html));
 ok('the default is the sharp one', /penQuality: 'max'/.test(html));
+ok('the pen starts at 2.5 px with maximum beautification',
+    html.includes('penSize: 2.5') && html.includes('streamlineIntensity: 100') &&
+    html.includes('id="slider-stroke-size" type="range" min="0.5" max="20" step="0.1" value="2.5"') &&
+    html.includes('id="slider-streamline" type="range" min="0" max="100" value="100"'));
+ok('the final outline is denser than the live draft and the cost is paid only on commit',
+    /static densify\(points, steps = 2\)/.test(html) &&
+    /densifySteps: 4/.test(html) &&
+    /densify\(points, opts\.densifySteps \|\| 2\)/.test(html));
+ok('zooming out never stretches the sheet wider than its height',
+    !/min-width:\s*100%/.test(html) &&
+    html.includes('width: 1450px;') && html.includes('height: 1950px;'));
+ok('there is a one-tap fit-to-width zoom button',
+    html.includes('id="btn-zoom-fit"') &&
+    html.includes('function getFitWidthZoom()') &&
+    html.includes('function fitPaperToViewportWidth()'));
+ok('fit-to-width measures the padded viewport and keeps the sheet proportional',
+    html.includes('vw - padX - 2') &&
+    html.includes('AppState.fitWidthMode = true') &&
+    html.includes("btn-zoom-fit').addEventListener('click', fitPaperToViewportWidth"));
 // The PDF backdrop is a whole extra page-sized canvas that most pages never use.
 ok('the PDF layer is retired when no PDF is loaded',
     html.includes('canvasPdf.width = 1;') && html.includes("canvasPdf.style.display = 'none';"));
