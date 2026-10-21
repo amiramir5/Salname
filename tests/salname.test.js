@@ -300,6 +300,9 @@ console.log('\n--- 7. pen / eraser input surface ---');
 ok('interaction canvas is device-pixel scaled like the ink layer',
     html.includes('canvasInteraction.width = layoutW * dpr;') &&
     html.includes('ctxInteraction.setTransform(dpr, 0, 0, dpr, 0, 0);'));
+ok('the live ink layer stays in the composited path, even while the sheet is zoomed',
+    html.includes("const ctxInteraction = canvasInteraction.getContext('2d');") &&
+    !/getContext\('2d',\s*\{\s*desynchronized:\s*true/.test(html));
 
 // The layer backing stores must be sized from the paper's LAYOUT size. `getBoundingClientRect()`
 // reports zoomed pixels: sizing from it made the bitmaps change size with the zoom, so the ink

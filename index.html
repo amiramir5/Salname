@@ -2861,8 +2861,13 @@
         const ctxPdf = canvasPdf.getContext('2d');
         const ctxHighlighter = canvasHighlighter.getContext('2d');
         const ctxInk = canvasInk.getContext('2d');
-        // Enable low-latency desynchronized context where supported for Windows tablets
-        const ctxInteraction = canvasInteraction.getContext('2d', { desynchronized: true }) || canvasInteraction.getContext('2d');
+        // The live layer must stay in the normal compositor path. A desynchronized/
+        // low-latency 2D canvas is translucent here and sits under DOM overlays (the mind-map
+        // layers, the empty-page hint, the floating controls). With CSS `zoom` on the sheet,
+        // Chromium could paint the stroke into the canvas (getImageData saw it) but never
+        // composite it, so nothing appeared until pen-up copied the stroke to the normal ink
+        // layer. The incremental stroke engine is already fast enough; correctness wins.
+        const ctxInteraction = canvasInteraction.getContext('2d');
 
         /**
          * COMPLETE LOCKDOWN OF WINDOWS 10 RIGHT-CLICK, PRESS-AND-HOLD RING & CONTEXT MENU FOR STYLUS
@@ -5214,7 +5219,7 @@
                 notes.push('فریم میافتد. «روانتر (سبکتر)» را بزن و دوباره بنویس؛ اگر افت قطع شد، همین را نگه دار.');
             }
             if (ctxInfo.desynchronized === false) {
-                notes.push('مرورگر مسیر کم‌تأخیر (desynchronized) را نداد؛ همین بوم زنده دارد عادی ترکیب می‌شود.');
+                notes.push('بوم زنده عمداً در مسیر ترکیب عادی است تا هنگام زوم، جوهرِ در حال نوشتن ناپدید نشود.');
             }
             const noteEl = document.getElementById('pen-meter-note');
             if (noteEl) {
@@ -8614,9 +8619,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 22,
+            version: 23,
             date: '2026-10-22',
-            features: 'proportional paper zoom + fit-width button + final-only ink quality pass'
+            features: 'reliable live ink under zoom + proportional paper zoom + fit-width button'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
