@@ -159,3 +159,32 @@ unit of work?
 - Does a page with almost nothing on it feel fast (i.e. does it degrade with the amount of
   writing)?
 - **Control:** is inking inside Edge's own PDF viewer smooth on the same tablet?
+
+## Update (build 24) - the live stroke now lives on the destination layer
+
+Problem: on the tablet, nothing appeared while the pen was down; the line only showed up after
+the pen lifted (the commit copies the stroke to the main ink layer). Headless Chrome could not
+reproduce it, and the pixels WERE in the interaction canvas (`getImageData` saw them), so the
+canvas was drawn but never composited on that device.
+
+Two changes:
+
+1. `ctxInteraction` no longer asks for `{ desynchronized: true }`. A translucent low-latency
+   canvas under a CSS-zoomed subtree is exactly the case where Chromium may keep the pixels
+   and skip the composite.
+2. The freehand preview is now painted **straight onto the layer the committed stroke will use**
+   (`ctxInk` / `ctxHighlighter`). The interaction layer keeps the pen cursor and the predicted
+   tail only. Pen-up repaints the exact rectangle the draft touched (`repaintInkRegion`), so the
+   jagged draft is replaced by the smoothed final stroke in the same task - no gap, no ghost.
+
+Measured in headless Chrome (dpr 2, 400 committed strokes on the page):
+
+| case | per raw sample | pen-up |
+|---|---|---|
+| empty page, 20-sample letter | 0.12 ms | 1.5 ms |
+| 120 strokes, 20-sample letter | 0.11 ms | 1.0 ms |
+| 400 strokes, 20-sample letter | 0.08 ms | 1.2 ms |
+| 400 strokes, 120-sample long stroke | 0.08 ms | 2.3 ms |
+
+So the live path stays far inside a frame budget and the commit is still a region repaint, not a
+full page redraw.

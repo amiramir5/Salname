@@ -304,6 +304,22 @@ ok('the live ink layer stays in the composited path, even while the sheet is zoo
     html.includes("const ctxInteraction = canvasInteraction.getContext('2d');") &&
     !/getContext\('2d',\s*\{\s*desynchronized:\s*true/.test(html));
 
+// The freehand preview is painted straight onto the layer the committed stroke will use.
+// A few tablet compositors never put a CSS-zoomed interaction canvas on screen, so the ink
+// only showed up after pen-up copied it to the ink layer. Painting the real segments where
+// the final stroke lives makes the live line impossible to lose.
+ok('the live stroke is painted on the destination layer, not only on the interaction canvas',
+    /function drawIncrementalSegments[\s\S]{0,1400}const targetCtx = isHighlighter \? ctxHighlighter : ctxInk;/.test(html) &&
+    /function drawIncrementalSegments[\s\S]{0,5000}targetCtx\.quadraticCurveTo/.test(html));
+ok('the live draft is measured so pen-up can wipe exactly that area',
+    html.includes('let liveDraftBox = null;') &&
+    /liveDraftBox = unionBox\(liveDraftBox, draftBox\)/.test(html));
+ok('pen-up repaints the draft area instead of stacking the final stroke on top of it',
+    /repaintInkRegion\(draft\)/.test(html) &&
+    /if \(!liveDraftBox\) \{\s*\n\s*InkBeautifier\.renderSmoothStroke\(targetCtx, newStroke\);/.test(html));
+ok('an interrupted stroke never leaves a ghost draft on the page',
+    (html.match(/repaintInkRegion\((staleDraft|abandonedDraft|draft)\)/g) || []).length >= 3);
+
 // The layer backing stores must be sized from the paper's LAYOUT size. `getBoundingClientRect()`
 // reports zoomed pixels: sizing from it made the bitmaps change size with the zoom, so the ink
 // was squeezed into part of the page and the clear-rects no longer covered the layers (which is

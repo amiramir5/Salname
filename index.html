@@ -2940,6 +2940,14 @@
         // ctxInteraction.lineWidth per sample (that is what makes the live line taper like the
         // committed one), so the chosen width cannot be read back from the context afterwards.
         let liveStrokeWidth = 1.2;
+        // The freehand preview is painted straight onto the destination layer (ink or
+        // highlighter), not only onto the interaction canvas. On a few tablet compositors a
+        // CSS-zoomed interaction canvas kept the pixels but never put them on screen, so the
+        // stroke only appeared after pen-up copied it to the main layer. Painting the real
+        // segments where the final stroke will live makes the preview impossible to lose;
+        // this box is the area that has to be cleared/repainted once the final stroke is in
+        // AppState. It is null for shape/dot previews that still use the interaction layer.
+        let liveDraftBox = null;
 
         // Eraser size, in CSS pixels. One constant drives BOTH the erase hit-test and the
         // on-screen ring, so the circle you see is exactly the area that gets erased.
@@ -4810,6 +4818,14 @@
             // length of the stroke.
             const first = Math.max(0, fromIdx - 2);
             const batchStart = Math.max(1, first);
+
+            // Freehand ink goes straight onto the same layer the committed stroke will use.
+            // The interaction layer still owns the pen cursor and the predicted tail, but it
+            // is no longer the only place the live line exists.
+            if (isHighlighter) {
+                ensureHighlighterLayer(true, paperStage.clientWidth, paperStage.clientHeight);
+            }
+            const targetCtx = isHighlighter ? ctxHighlighter : ctxInk;
             let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
             const include = (p) => {
                 if (p.x < bx0) bx0 = p.x;
@@ -4820,7 +4836,9 @@
             for (let i = Math.max(0, batchStart - 1); i < pts.length; i++) include(pts[i]);
             if (predictedPt) include(predictedPt);
             const inkPad = Math.max(4, strokeW * 0.75 + 6);
-            trackLiveInk({ x0: bx0 - inkPad, y0: by0 - inkPad, x1: bx1 + inkPad, y1: by1 + inkPad });
+            const draftBox = { x0: bx0 - inkPad, y0: by0 - inkPad, x1: bx1 + inkPad, y1: by1 + inkPad };
+            trackLiveInk(draftBox);
+            liveDraftBox = unionBox(liveDraftBox, draftBox);
 
             // A translucent preview (the highlighter) is painted at 38% alpha, so the couple of
             // segments that are redrawn on every batch would build up into a dark blob under the
@@ -4828,19 +4846,19 @@
             // renderInteractionOverlay) and the pen — the tool this app is written with — never
             // touches that property at all.
 
-            ctxInteraction.strokeStyle = AppState.activeTool === 'shape' ? AppState.shapeStrokeColor : AppState.activeColor;
-            ctxInteraction.lineCap = 'round';
-            ctxInteraction.lineJoin = 'round';
+            targetCtx.strokeStyle = AppState.activeTool === 'shape' ? AppState.shapeStrokeColor : AppState.activeColor;
+            targetCtx.lineCap = 'round';
+            targetCtx.lineJoin = 'round';
 
             if (pts.length <= 2) {
                 let dist = 0;
                 if (pts.length === 2) dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
                 if (pts.length === 1 || dist < 1.8) {
                     const w = isHighlighter ? strokeW : InkBeautifier.widthAt(pts, 0, strokeW, { pressure: true, velocity: false });
-                    ctxInteraction.beginPath();
-                    ctxInteraction.arc(pts[0].x, pts[0].y, Math.max(0.55, w * 0.5), 0, Math.PI * 2);
-                    ctxInteraction.fillStyle = ctxInteraction.strokeStyle;
-                    ctxInteraction.fill();
+                    targetCtx.beginPath();
+                    targetCtx.arc(pts[0].x, pts[0].y, Math.max(0.55, w * 0.5), 0, Math.PI * 2);
+                    targetCtx.fillStyle = targetCtx.strokeStyle;
+                    targetCtx.fill();
                     return;
                 }
             }
@@ -4857,23 +4875,23 @@
                     ? strokeW
                     : InkBeautifier.widthAt(pts, i, strokeW, { pressure: true, velocity: true });
 
-                ctxInteraction.beginPath();
+                targetCtx.beginPath();
                 if (i === 1) {
-                    ctxInteraction.moveTo(pts[0].x, pts[0].y);
+                    targetCtx.moveTo(pts[0].x, pts[0].y);
                 } else {
-                    ctxInteraction.moveTo((prev.x + cur.x) * 0.5, (prev.y + cur.y) * 0.5);
+                    targetCtx.moveTo((prev.x + cur.x) * 0.5, (prev.y + cur.y) * 0.5);
                 }
                 if (next) {
-                    ctxInteraction.quadraticCurveTo(
+                    targetCtx.quadraticCurveTo(
                         cur.x, cur.y,
                         (cur.x + next.x) * 0.5,
                         (cur.y + next.y) * 0.5
                     );
                 } else {
-                    ctxInteraction.lineTo(cur.x, cur.y);
+                    targetCtx.lineTo(cur.x, cur.y);
                 }
-                ctxInteraction.lineWidth = w;
-                ctxInteraction.stroke();
+                targetCtx.lineWidth = w;
+                targetCtx.stroke();
             }
 
             if (predictedPt) {
@@ -4881,6 +4899,8 @@
                 const w = isHighlighter
                     ? strokeW
                     : InkBeautifier.widthAt(pts, pts.length - 1, strokeW, { pressure: true, velocity: false });
+                // A predicted point is never real ink: keep it on the interaction layer so
+                // the next real sample can wipe it without touching the committed/draft line.
                 ctxInteraction.beginPath();
                 ctxInteraction.moveTo(tail.x, tail.y);
                 ctxInteraction.lineTo(predictedPt.x, predictedPt.y);
@@ -5505,6 +5525,13 @@
             cachedCanvasRect = paperStage.getBoundingClientRect();
             // Wipe the hover pen dot so it never sits on top of the stroke we are starting.
             clearLayer(ctxInteraction);
+            // Normally pen-up already did this; it matters after an interrupted pointer
+            // sequence or a tool change, where an orphaned draft would otherwise stay on ink.
+            if (liveDraftBox) {
+                const staleDraft = liveDraftBox;
+                liveDraftBox = null;
+                repaintInkRegion(staleDraft);
+            }
             try {
                 if (canvasInteraction.setPointerCapture) {
                     canvasInteraction.setPointerCapture(e.pointerId);
@@ -5781,6 +5808,13 @@
                 pendingErasePath = [];
                 eraseBatchDirty = null;
                 clearLayer(ctxInteraction);
+                // The pen draft that was on the ink layer is not a stroke yet: drop it before
+                // the eraser starts, otherwise it would stay on the page as a ghost line.
+                if (liveDraftBox) {
+                    const abandonedDraft = liveDraftBox;
+                    liveDraftBox = null;
+                    repaintInkRegion(abandonedDraft);
+                }
                 pushUndoState();
             }
 
@@ -5931,7 +5965,20 @@
                         ensureHighlighterLayer(true, paperStage.clientWidth, paperStage.clientHeight);
                     }
                     const targetCtx = newStroke.tool === 'highlighter' ? ctxHighlighter : ctxInk;
-                    InkBeautifier.renderSmoothStroke(targetCtx, newStroke);
+                    // Normally the live draft is already on this layer. Repainting the draft's
+                    // box below removes it and draws the final smoothed stroke in the same
+                    // synchronous task, so there is no visible gap. Shapes never make a draft.
+                    if (!liveDraftBox) {
+                        InkBeautifier.renderSmoothStroke(targetCtx, newStroke);
+                    }
+                }
+                // The freehand preview was painted on the destination layer. Clear every
+                // rectangle it touched and redraw the committed content there, including the
+                // final smoothed stroke; this also handles a canceled/dot-only stroke.
+                if (liveDraftBox) {
+                    const draft = liveDraftBox;
+                    liveDraftBox = null;
+                    repaintInkRegion(draft);
                 }
                 AppState.currentRawPoints = [];
                 AppState.lastRenderedIndex = 0;
@@ -8619,9 +8666,9 @@
         // the device, so a stale browser cache can never be mistaken for a bug.
         // ------------------------------------------------------------------
         const APP_BUILD = {
-            version: 23,
+            version: 24,
             date: '2026-10-22',
-            features: 'reliable live ink under zoom + proportional paper zoom + fit-width button'
+            features: 'live ink painted on the destination layer + proportional paper zoom + fit-width button'
         };
         (function initBuildStamp() {
             const stampEl = document.getElementById('app-build-stamp');
