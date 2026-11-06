@@ -614,6 +614,15 @@
                     <span>درختواره خلاصه دروس</span>
                     <span id="badge-mindmap-count" class="hidden px-1 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[9px] font-bold">۰</span>
                 </button>
+                <button id="btn-mode-scratchpad" class="px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-600 hover:text-slate-900 transition flex items-center gap-1" title="کاغذ باطله و چرک‌نویس برای حل تمرین، مسائل و یادداشت‌های سریع">
+                    <svg class="w-3.5 h-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="9" y1="13" x2="15" y2="13"></line>
+                        <line x1="9" y1="17" x2="13" y2="17"></line>
+                    </svg>
+                    <span>کاغذ باطله (چرک‌نویس)</span>
+                </button>
             </div>
 
             <input type="file" id="input-pdf-upload" accept="application/pdf" class="hidden">
@@ -867,6 +876,57 @@
             <button id="btn-mm-toggle-ink" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[11px] font-medium flex items-center gap-1 shrink-0 transition" title="قفل کردن کارت‌ها برای نوشتن راحت با قلم روی کل نمودار">
                 <svg class="w-3.5 h-3.5 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path></svg>
                 <span id="label-mm-ink-mode">حالت: شاخه‌سازی + قلم</span>
+            </button>
+        </div>
+
+        <!-- Scratchpad Mode Sub-bar: Rough Sheet & Problem Solving Controls (Hidden by default) -->
+        <div id="subbar-scratchpad-controls" class="hidden items-center gap-1.5 flex-1 overflow-x-auto">
+            <span class="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                <svg class="w-3.5 h-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                <span>چرک‌نویس و حل سوال</span>
+            </span>
+
+            <!-- Clear / New Paper -->
+            <button id="btn-scratch-clear" class="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-[11px] font-semibold flex items-center gap-1 shrink-0 shadow-xs transition" title="پاک کردن تمام دست‌خط‌های چرک‌نویس و تحویل کاغذ کاملاً نو و سفید">
+                <svg class="w-3.5 h-3.5 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                <span>کاغذ نو (مچاله و تمیز)</span>
+            </button>
+
+            <!-- Quick Pattern Switcher -->
+            <div class="flex items-center bg-white border border-slate-200 rounded-md p-0.5 shrink-0">
+                <button id="btn-scratch-paper-grid" class="px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-100 rounded transition" title="کاغذ شطرنجی (مناسب رسم نمودار و حل ریاضی/فیزیک)">
+                    شطرنجی ریاضی
+                </button>
+                <button id="btn-scratch-paper-lined" class="px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-100 rounded transition" title="کاغذ خط‌دار">
+                    خط‌دار
+                </button>
+                <button id="btn-scratch-paper-blank" class="px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-100 rounded transition" title="کاغذ سفید بدون خط">
+                    سفید
+                </button>
+            </div>
+
+            <!-- Insert Question Divider -->
+            <button id="btn-scratch-insert-q" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[11px] font-medium flex items-center gap-1 shrink-0 transition" title="افزودن خط جداکننده و نشانگر سوال بعدی برای حل گام‌به‌گام تست‌ها">
+                <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>+ خط جداکننده تست/سوال</span>
+            </button>
+
+            <!-- Copy to Planner -->
+            <button id="btn-scratch-copy-to-planner" class="px-2 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[11px] font-medium flex items-center gap-1 shrink-0 transition" title="کپی کردن دست‌خط این چرک‌نویس به برنامه روزانه اصلی">
+                <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>انتقال به برنامه روزانه</span>
             </button>
         </div>
 
@@ -2792,9 +2852,10 @@
             symbols: [],               // Array of { id, x, y, symbolType, size, color, rotation }
             priorities: ['', '', ''],
 
-            // Separate Persistent Buffers for Daily Planner vs Daily Mind-Map Summary
+            // Separate Persistent Buffers for Daily Planner vs Daily Mind-Map Summary vs Scratchpad
             plannerData: { strokes: [], texts: [], symbols: [] },
             mindmapData: { strokes: [], texts: [], symbols: [], nodes: [], reviews: [], images: [] },
+            scratchpadData: { strokes: [], texts: [], symbols: [] },
             selectedMindmapNodeId: null,
             editingMindmapNodeId: null,
             mindmapFreeInkLock: false,
@@ -3383,6 +3444,10 @@
                 AppState.plannerData.strokes = AppState.strokes;
                 AppState.plannerData.texts = AppState.texts;
                 AppState.plannerData.symbols = AppState.symbols;
+            } else if (AppState.workspaceMode === 'scratchpad') {
+                AppState.scratchpadData.strokes = AppState.strokes;
+                AppState.scratchpadData.texts = AppState.texts;
+                AppState.scratchpadData.symbols = AppState.symbols;
             } else {
                 AppState.mindmapData.strokes = AppState.strokes;
                 AppState.mindmapData.texts = AppState.texts;
@@ -3529,10 +3594,13 @@
             const hint = document.getElementById('paper-empty-hint');
             if (!hint) return;
             const inMindmap = AppState.workspaceMode === 'mindmap';
+            const inScratchpad = AppState.workspaceMode === 'scratchpad';
             const cards = (AppState.mindmapData.nodes || []).length;
             const inkCount = inMindmap
                 ? (AppState.mindmapData.strokes || []).length
-                : (AppState.strokes || []).length;
+                : inScratchpad
+                    ? (AppState.scratchpadData.strokes || []).length
+                    : (AppState.strokes || []).length;
             const shouldShow = inkCount === 0 && (!inMindmap || cards === 0);
             if (shouldShow === emptyHintShown) return;
             emptyHintShown = shouldShow;
@@ -3541,9 +3609,13 @@
             // The aim is different in each workspace — say the right one, don't describe the app.
             const body = document.getElementById('paper-empty-hint-body');
             if (body) {
-                body.textContent = inMindmap
-                    ? 'اینجا بنویس یا دست‌خطی که در صفحهٔ برنامه‌ریزی کشیده‌ای را به کارت تبدیل کن. دکمهٔ «ساخت درخت از دست‌خط خودم» هر خط را یک کارت می‌کند و تودرتو بودن خط‌ها، شاخه‌ها را می‌سازد.'
-                    : 'هر خط یک کارت می‌شود و تودرتو بودن خط‌ها، شاخه‌ها را می‌سازد. بعد از نوشتن، در حالت «درخت‌واره خلاصه دروس» دکمهٔ «ساخت درخت از دست‌خط خودم» را بزن.';
+                if (inScratchpad) {
+                    body.textContent = 'اینجا فضای آزاد شما برای حل تمرین، چرک‌نویس، محاسبات سریع و حل مسائل بدون شلوغ شدن برنامهٔ اصلی است. هر وقت خواستی دکمهٔ «کاغذ نو» را بزن.';
+                } else if (inMindmap) {
+                    body.textContent = 'اینجا بنویس یا دست‌خطی که در صفحهٔ برنامه‌ریزی کشیده‌ای را به کارت تبدیل کن. دکمهٔ «ساخت درخت از دست‌خط خودم» هر خط را یک کارت می‌کند و تودرتو بودن خط‌ها، شاخه‌ها را می‌سازد.';
+                } else {
+                    body.textContent = 'هر خط یک کارت می‌شود و تودرتو بودن خط‌ها، شاخه‌ها را می‌سازد. بعد از نوشتن، در حالت «درخت‌واره خلاصه دروس» دکمهٔ «ساخت درخت از دست‌خط خودم» را بزن.';
+                }
             }
         }
 
@@ -3563,6 +3635,9 @@
                 mindmapStrokes: AppState.mindmapData.strokes,
                 mindmapTexts: AppState.mindmapData.texts,
                 mindmapSymbols: AppState.mindmapData.symbols,
+                scratchpadStrokes: AppState.scratchpadData.strokes,
+                scratchpadTexts: AppState.scratchpadData.texts,
+                scratchpadSymbols: AppState.scratchpadData.symbols,
                 priorities: AppState.priorities,
                 paperType: AppState.paperType,
                 pdfDataBase64: AppState.pdfDataBase64,
@@ -3733,7 +3808,7 @@
             // 1. In Planner Mode, draw right schedule margin; in Mind-Map mode, draw smooth Bezier tree connectors
             if (AppState.workspaceMode === 'planner') {
                 drawRightScheduleMargin(ctxInk, w, h);
-            } else {
+            } else if (AppState.workspaceMode === 'mindmap') {
                 drawMindMapConnectors(ctxInk);
             }
 
@@ -4524,17 +4599,26 @@
         function applyWorkspaceModeUI(targetMode) {
             const btnPlanner = document.getElementById('btn-mode-planner');
             const btnMindmap = document.getElementById('btn-mode-mindmap');
+            const btnScratchpad = document.getElementById('btn-mode-scratchpad');
             const subPlanner = document.getElementById('subbar-planner-priorities');
             const subMindmap = document.getElementById('subbar-mindmap-controls');
+            const subScratchpad = document.getElementById('subbar-scratchpad-controls');
             const activeCls = 'px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-slate-900 shadow-sm transition flex items-center gap-1';
             const idleCls = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-600 hover:text-slate-900 transition flex items-center gap-1';
-            const isMindmap = targetMode === 'mindmap';
 
-            btnMindmap.className = isMindmap ? activeCls : idleCls;
-            btnPlanner.className = isMindmap ? idleCls : activeCls;
-            subPlanner.classList.toggle('hidden', isMindmap);
-            subMindmap.classList.toggle('hidden', !isMindmap);
-            subMindmap.classList.toggle('flex', isMindmap);
+            if (btnPlanner) btnPlanner.className = targetMode === 'planner' ? activeCls : idleCls;
+            if (btnMindmap) btnMindmap.className = targetMode === 'mindmap' ? activeCls : idleCls;
+            if (btnScratchpad) btnScratchpad.className = targetMode === 'scratchpad' ? activeCls : idleCls;
+
+            if (subPlanner) subPlanner.classList.toggle('hidden', targetMode !== 'planner');
+            if (subMindmap) {
+                subMindmap.classList.toggle('hidden', targetMode !== 'mindmap');
+                subMindmap.classList.toggle('flex', targetMode === 'mindmap');
+            }
+            if (subScratchpad) {
+                subScratchpad.classList.toggle('hidden', targetMode !== 'scratchpad');
+                subScratchpad.classList.toggle('flex', targetMode === 'scratchpad');
+            }
         }
 
         function switchWorkspaceMode(targetMode) {
@@ -4554,6 +4638,10 @@
                 AppState.strokes = AppState.mindmapData.strokes;
                 AppState.texts = AppState.mindmapData.texts;
                 AppState.symbols = AppState.mindmapData.symbols;
+            } else if (targetMode === 'scratchpad') {
+                AppState.strokes = AppState.scratchpadData.strokes;
+                AppState.texts = AppState.scratchpadData.texts;
+                AppState.symbols = AppState.scratchpadData.symbols;
             } else {
                 AppState.strokes = AppState.plannerData.strokes;
                 AppState.texts = AppState.plannerData.texts;
@@ -6249,7 +6337,7 @@
             ctxInk.clip();
             if (AppState.workspaceMode === 'planner') {
                 drawRightScheduleMargin(ctxInk, w, h);
-            } else {
+            } else if (AppState.workspaceMode === 'mindmap') {
                 drawMindMapConnectors(ctxInk);
             }
             ctxInk.restore();
@@ -8642,6 +8730,112 @@
         // Workspace Mode Switcher & Mind-Map Controls
         document.getElementById('btn-mode-planner').addEventListener('click', () => switchWorkspaceMode('planner'));
         document.getElementById('btn-mode-mindmap').addEventListener('click', () => switchWorkspaceMode('mindmap'));
+        document.getElementById('btn-mode-scratchpad')?.addEventListener('click', () => switchWorkspaceMode('scratchpad'));
+
+        function showScratchStatus(msg) {
+            const indicator = document.getElementById('save-indicator');
+            if (!indicator) return;
+            indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> ${msg}`;
+            setTimeout(() => setSaveIndicator('saved'), 2500);
+        }
+
+        // Scratchpad Controls
+        document.getElementById('btn-scratch-clear')?.addEventListener('click', () => {
+            if (AppState.strokes.length === 0 && AppState.texts.length === 0 && AppState.symbols.length === 0) return;
+            pushUndoState();
+            AppState.strokes = [];
+            AppState.texts = [];
+            AppState.symbols = [];
+            AppState.scratchpadData.strokes = [];
+            AppState.scratchpadData.texts = [];
+            AppState.scratchpadData.symbols = [];
+            clearSelection();
+            renderAllLayers();
+            scheduleSavePage();
+            showScratchStatus('کاغذ باطله پاک شد و یک کاغذ نو آماده است');
+        });
+
+        document.getElementById('btn-scratch-paper-grid')?.addEventListener('click', () => {
+            AppState.paperType = 'grid';
+            applyPaperClass();
+            scheduleSavePage();
+            showScratchStatus('کاغذ شطرنجی فعال شد');
+        });
+
+        document.getElementById('btn-scratch-paper-lined')?.addEventListener('click', () => {
+            AppState.paperType = 'lined';
+            applyPaperClass();
+            scheduleSavePage();
+            showScratchStatus('کاغذ خط‌دار فعال شد');
+        });
+
+        document.getElementById('btn-scratch-paper-blank')?.addEventListener('click', () => {
+            AppState.paperType = 'blank';
+            applyPaperClass();
+            scheduleSavePage();
+            showScratchStatus('کاغذ سفید فعال شد');
+        });
+
+        let scratchQuestionCounter = 1;
+        document.getElementById('btn-scratch-insert-q')?.addEventListener('click', () => {
+            pushUndoState();
+            let maxY = 40;
+            AppState.strokes.forEach(s => {
+                s.points.forEach(p => { if (p.y > maxY) maxY = p.y; });
+            });
+            AppState.texts.forEach(t => {
+                if (t.y + 30 > maxY) maxY = t.y + 30;
+            });
+
+            const lineY = Math.min(maxY + 35, (paperStage.clientHeight || 2800) - 60);
+            const w = paperStage.clientWidth || 900;
+            AppState.strokes.push({
+                id: 'scratch_sep_' + Date.now(),
+                tool: 'pen',
+                color: '#94A3B8',
+                size: 1.5,
+                points: [
+                    { x: 40, y: lineY, p: 0.5 },
+                    { x: w - 40, y: lineY, p: 0.5 }
+                ],
+                isSharpGeometry: true
+            });
+
+            scratchQuestionCounter++;
+            const qNumPersian = toPersianDigits(scratchQuestionCounter);
+            AppState.texts.push({
+                id: 'scratch_txt_' + Date.now(),
+                x: w - 150,
+                y: lineY - 22,
+                text: `◄ سوال ${qNumPersian} :`,
+                fontSize: 13,
+                color: '#2563EB',
+                bold: true
+            });
+
+            renderAllLayers();
+            scheduleSavePage();
+            showScratchStatus(`جداکننده سوال ${qNumPersian} افزوده شد`);
+        });
+
+        document.getElementById('btn-scratch-copy-to-planner')?.addEventListener('click', () => {
+            if (AppState.strokes.length === 0 && AppState.texts.length === 0) {
+                showScratchStatus('هنوز چیزی در چرک‌نویس نوشته نشده است');
+                return;
+            }
+            const copiedStrokes = JSON.parse(JSON.stringify(AppState.strokes)).map(s => {
+                s.id = 'from_scratch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+                return s;
+            });
+            const copiedTexts = JSON.parse(JSON.stringify(AppState.texts)).map(t => {
+                t.id = 'from_scratch_txt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+                return t;
+            });
+            AppState.plannerData.strokes.push(...copiedStrokes);
+            AppState.plannerData.texts.push(...copiedTexts);
+            scheduleSavePage();
+            showScratchStatus('دست‌خط به صفحه برنامه روزانه منتقل شد');
+        });
         document.getElementById('btn-mm-add-root').addEventListener('click', addMindMapRootNode);
         document.getElementById('btn-mm-add-child').addEventListener('click', () => {
             addMindMapChildNode(AppState.selectedMindmapNodeId);
@@ -8860,11 +9054,20 @@
                 texts: (saved && saved.mindmapTexts) ? saved.mindmapTexts : [],
                 symbols: (saved && saved.mindmapSymbols) ? saved.mindmapSymbols : []
             };
+            AppState.scratchpadData = {
+                strokes: (saved && saved.scratchpadStrokes) ? saved.scratchpadStrokes : [],
+                texts: (saved && saved.scratchpadTexts) ? saved.scratchpadTexts : [],
+                symbols: (saved && saved.scratchpadSymbols) ? saved.scratchpadSymbols : []
+            };
 
             if (AppState.workspaceMode === 'mindmap') {
                 AppState.strokes = AppState.mindmapData.strokes;
                 AppState.texts = AppState.mindmapData.texts;
                 AppState.symbols = AppState.mindmapData.symbols;
+            } else if (AppState.workspaceMode === 'scratchpad') {
+                AppState.strokes = AppState.scratchpadData.strokes;
+                AppState.texts = AppState.scratchpadData.texts;
+                AppState.symbols = AppState.scratchpadData.symbols;
             } else {
                 AppState.strokes = AppState.plannerData.strokes;
                 AppState.texts = AppState.plannerData.texts;
@@ -9663,7 +9866,7 @@
                 // still stored but invisible, which reads as "my work is gone".
                 try {
                     const savedMode = localStorage.getItem(WORKSPACE_MODE_KEY);
-                    if (savedMode === 'mindmap' || savedMode === 'planner') AppState.workspaceMode = savedMode;
+                    if (savedMode === 'mindmap' || savedMode === 'planner' || savedMode === 'scratchpad') AppState.workspaceMode = savedMode;
                 } catch (_) {}
                 applyWorkspaceModeUI(AppState.workspaceMode);
 

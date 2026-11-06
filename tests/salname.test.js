@@ -1069,6 +1069,36 @@ ok('the meter says the one thing that fixes a frame drop',
     html.includes('دوباره بنویس') && html.includes('اگر افت قطع شد'));
 
 
+/* ------------------------------------------------------------------ *
+ * 13. Scratchpad Mode (کاغذ باطله و چرک‌نویس حل سوال)
+ * ------------------------------------------------------------------ */
+console.log('\n--- 13. scratchpad mode (کاغذ باطله و چرک‌نویس) ---');
+ok('the header has the scratchpad mode button with neutral chrome',
+    html.includes('id="btn-mode-scratchpad"') &&
+    html.includes('کاغذ باطله (چرک‌نویس)') &&
+    html.includes('text-amber-600'));
+ok('the scratchpad sub-bar contains clear, question divider and copy controls',
+    html.includes('id="subbar-scratchpad-controls"') &&
+    html.includes('id="btn-scratch-clear"') &&
+    html.includes('id="btn-scratch-insert-q"') &&
+    html.includes('id="btn-scratch-copy-to-planner"'));
+ok('the scratchpad sub-bar includes quick paper patterns for math problem solving',
+    html.includes('id="btn-scratch-paper-grid"') &&
+    html.includes('id="btn-scratch-paper-lined"') &&
+    html.includes('id="btn-scratch-paper-blank"'));
+ok('AppState maintains separate buffer for scratchpad',
+    html.includes('scratchpadData: { strokes: [], texts: [], symbols: [] }'));
+ok('switchWorkspaceMode binds strokes to scratchpadData',
+    html.includes("targetMode === 'scratchpad'") &&
+    html.includes('AppState.strokes = AppState.scratchpadData.strokes'));
+ok('buildPagePayload persists scratchpad strokes, texts and symbols',
+    html.includes('scratchpadStrokes: AppState.scratchpadData.strokes') &&
+    html.includes('scratchpadTexts: AppState.scratchpadData.texts') &&
+    html.includes('scratchpadSymbols: AppState.scratchpadData.symbols'));
+ok('empty hint guides the user in scratchpad mode',
+    html.includes('فضای آزاد شما برای حل تمرین، چرک‌نویس'));
+
+
 /* ------------------------------------------------------------------ */
 console.log('\n' + pass + ' passed, ' + failures.length + ' failed');
 if (failures.length) {
